@@ -1,0 +1,3 @@
+[submodule "dependencies/protocol-solidity"]
+	path = dependencies/protocol-solidity
+	url = https://github.com/tangle-network/protocol-solidity.git

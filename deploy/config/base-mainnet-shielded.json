@@ -1,0 +1,64 @@
+{
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "rpcUrl": "https://mainnet.base.org",
+
+  "shielded": {
+    "treeLevels": 30,
+    "maxEdges": 7,
+
+    "wrapper": {
+      "name": "Tangle Shielded USD",
+      "symbol": "tsUSD",
+      "feeBps": 0,
+      "wrappingLimit": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "allowNative": false
+    },
+
+    "stablecoins": [
+      {
+        "symbol": "USDC",
+        "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "note": "Circle native USDC on Base"
+      },
+      {
+        "symbol": "USDT",
+        "address": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+        "note": "Bridged Tether USD on Base"
+      },
+      {
+        "symbol": "DAI",
+        "address": "0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb",
+        "note": "Bridged DAI on Base (OptimismMintableERC20)"
+      }
+    ],
+
+    "vanchor": {
+      "minimumWithdrawalAmount": "0",
+      "maximumDepositAmount": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+
+    "bridge": {
+      "type": "layerzero",
+      "lzEndpoint": "0x1a44076050125825900e736c501f859c50fE728c",
+      "lzEndpointId": 30184,
+      "peers": {
+        "ethereum":  { "eid": 30101, "chainId": 1 },
+        "arbitrum":  { "eid": 30110, "chainId": 42161 },
+        "optimism":  { "eid": 30111, "chainId": 10 },
+        "polygon":   { "eid": 30109, "chainId": 137 },
+        "bsc":       { "eid": 30102, "chainId": 56 },
+        "avalanche":   { "eid": 30106, "chainId": 43114 },
+        "hyperliquid": { "eid": 30367, "chainId": 999 }
+      },
+      "note": "8-chain bridge: Ethereum, Arbitrum, Base, Optimism, Polygon, BSC, Avalanche, Hyperliquid. maxEdges=7 (self + 7 peers). Same LZ endpoint on all mainnet chains."
+    }
+  },
+
+  "notes": {
+    "tangle": "Set TANGLE env var to the deployed Tangle proxy address on Base",
+    "poseidon": "Poseidon libraries must be deployed via circomlibjs before running the Forge script. Set POSEIDON_HASHER to the deployed PoseidonHasher address.",
+    "verifiers": "Verifier contracts must be deployed from circuit artifacts. Set VANCHOR_VERIFIER to the deployed VAnchorVerifier address.",
+    "security": "MAINNET: Ensure trusted setup ceremony has been completed with multi-party contributions before deploying verifiers."
+  }
+}
