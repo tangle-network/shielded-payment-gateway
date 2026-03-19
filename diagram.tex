@@ -1,0 +1,135 @@
+\documentclass[border=20pt]{standalone}
+\usepackage{tikz}
+\usepackage{helvet}\renewcommand{\familydefault}{\sfdefault}
+\usepackage[T1]{fontenc}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds,shadows.blur}
+
+\definecolor{tanglePurple}{HTML}{7B3FE4}
+\definecolor{tangleDark}{HTML}{1A1B2E}
+\definecolor{tangleBlue}{HTML}{4F8FFF}
+\definecolor{tangleGreen}{HTML}{00C9A7}
+\definecolor{tangleOrange}{HTML}{FF8C42}
+\definecolor{tangleRed}{HTML}{FF4D6A}
+\definecolor{tangleGray}{HTML}{2A2B3D}
+\definecolor{tangleLightGray}{HTML}{3A3B4D}
+\definecolor{cardBg}{HTML}{222336}
+\definecolor{textLight}{HTML}{E0E0F0}
+\definecolor{textDim}{HTML}{8888AA}
+
+\begin{document}
+\begin{tikzpicture}[
+  every node/.style={font=\sffamily},
+  card/.style={
+    draw=tangleLightGray, fill=cardBg, rounded corners=8pt,
+    minimum width=3.8cm, minimum height=1.6cm, align=center,
+    text=textLight, line width=0.5pt,
+    blur shadow={shadow blur steps=6, shadow xshift=0pt, shadow yshift=-2pt, shadow blur radius=4pt, shadow opacity=15}
+  },
+  dashcard/.style={
+    card, draw=tanglePurple!50, dashed, line width=0.8pt
+  },
+  arr/.style={-{Stealth[length=3mm, width=2mm]}, line width=1pt},
+  lbl/.style={font=\sffamily\scriptsize, fill=tangleDark, text=textLight, inner sep=3pt, rounded corners=2pt},
+]
+
+% Background
+\fill[tangleDark] (-3.5,-7.5) rectangle (15,6.5);
+
+% Title
+\node[font=\sffamily\Large\bfseries, text=white] at (5.75,5.5) {Anonymous AI Inference on Tangle};
+\node[font=\sffamily\small, text=tanglePurple!70] at (5.75,4.8) {Shielded Payment Gateway + vLLM Blueprint};
+
+% User
+\node[dashcard, fill=tanglePurple!15, draw=tanglePurple!60] (user) at (0,3) {
+  \textbf{\color{tanglePurple}User}\\[-2pt]
+  {\scriptsize\color{textDim} ephemeral identity}
+};
+
+% VAnchor Pool
+\node[card, fill=tangleBlue!12, draw=tangleBlue!40] (pool) at (0,0) {
+  \textbf{\color{tangleBlue}VAnchor Pool}\\[-2pt]
+  {\scriptsize\color{textDim} ZK shielded · UTXO}\\[-2pt]
+  {\scriptsize\color{textDim} cross-chain · multi-asset}
+};
+
+% Gateway
+\node[card] (gw) at (5.75,0) {
+  \textbf{Shielded Gateway}\\[-2pt]
+  {\scriptsize\color{textDim} stateless proxy}\\[-2pt]
+  {\scriptsize\color{textDim} atomic forwarding}
+};
+
+% Credits
+\node[card, fill=tangleGreen!10, draw=tangleGreen!40] (credits) at (11.5,0) {
+  \textbf{\color{tangleGreen}Shielded Credits}\\[-2pt]
+  {\scriptsize\color{textDim} pseudonymous accounts}\\[-2pt]
+  {\scriptsize\color{textDim} expiry refunds}
+};
+
+% Operator
+\node[dashcard, fill=tangleOrange!12, draw=tangleOrange!50] (op) at (11.5,3) {
+  \textbf{\color{tangleOrange}Operator}\\[-2pt]
+  {\scriptsize\color{textDim} vLLM · GPU node}
+};
+
+% x402
+\node[card, minimum width=2.8cm, minimum height=1.2cm] (x402) at (11.5,5.8) {
+  \textbf{x402 HTTP}\\[-2pt]
+  {\scriptsize\color{textDim} /v1/chat/completions}
+};
+
+% Arrows
+\draw[arr, tanglePurple!70] (user) -- node[lbl] {ZK proof} (pool);
+\draw[arr, tangleBlue!70] (pool) -- node[lbl] {withdraw} (gw);
+\draw[arr, white!50] (gw) -- node[lbl] {fund} (credits);
+\draw[arr, tangleGreen!70] (credits) -- node[lbl, right] {claim} (op);
+\draw[arr, tanglePurple!50] (user) -| node[lbl, near start, above] {EIP-712 sig} (credits);
+\draw[arr, tangleOrange!50] (op) -- node[lbl, right] {serve} (x402);
+
+% Change UTXO loop
+\draw[arr, dashed, tangleBlue!40] (pool.south) to[bend right=60]
+  node[lbl, below] {change UTXO (reshielded)} (pool.south west);
+
+% Bottom: Chain bridge
+\node[draw=tangleLightGray, fill=cardBg, rounded corners=6pt,
+      minimum width=14.5cm, minimum height=1.4cm, align=center,
+      text=textLight, line width=0.5pt,
+      blur shadow={shadow blur steps=6, shadow xshift=0pt, shadow yshift=-2pt, shadow blur radius=4pt, shadow opacity=15}
+] (bridge) at (5.75,-3.2) {
+  \textbf{8-Chain Bridge} {\color{textDim}via LayerZero V2}\\[-1pt]
+  {\scriptsize\color{tanglePurple!70} Ethereum} {\scriptsize\color{textDim}·}
+  {\scriptsize\color{tangleBlue!70} Arbitrum} {\scriptsize\color{textDim}·}
+  {\scriptsize\color{tangleGreen!70} Base} {\scriptsize\color{textDim}·}
+  {\scriptsize\color{tangleOrange!70} Optimism} {\scriptsize\color{textDim}·}
+  {\scriptsize\color{textLight} Polygon} {\scriptsize\color{textDim}·}
+  {\scriptsize\color{textLight} BSC} {\scriptsize\color{textDim}·}
+  {\scriptsize\color{textLight} Avalanche} {\scriptsize\color{textDim}·}
+  {\scriptsize\color{textLight} Hyperliquid}
+};
+
+\draw[arr, tangleLightGray, dashed] (pool) -- (bridge);
+
+% Bottom: Knowledge table
+\node[draw=tangleGreen!30, fill=tangleGreen!5, rounded corners=6pt,
+      minimum width=6.8cm, minimum height=2.4cm, align=left,
+      text=textLight, line width=0.5pt, anchor=north west
+] at (-3,-4.8) {
+  {\small\bfseries\color{tangleGreen} Operator Knows}\\[4pt]
+  {\scriptsize\color{textLight} ✓ Your prompt / request}\\[1pt]
+  {\scriptsize\color{textLight} ✓ Payment amount}\\[1pt]
+  {\scriptsize\color{textLight} ✓ Credit commitment ID}
+};
+
+\node[draw=tangleRed!30, fill=tangleRed!5, rounded corners=6pt,
+      minimum width=6.8cm, minimum height=2.4cm, align=left,
+      text=textLight, line width=0.5pt, anchor=north west
+] at (4.5,-4.8) {
+  {\small\bfseries\color{tangleRed} Operator Doesn't Know}\\[4pt]
+  {\scriptsize\color{textLight} ✗ Your wallet address}\\[1pt]
+  {\scriptsize\color{textLight} ✗ Your deposit amount or total balance}\\[1pt]
+  {\scriptsize\color{textLight} ✗ Which deposit funded you}\\[1pt]
+  {\scriptsize\color{textLight} ✗ Your other sessions}
+};
+
+\end{tikzpicture}
+\end{document}
