@@ -111,7 +111,7 @@ See [`deploy/config/`](deploy/config/) for Base Sepolia and Base Mainnet configu
 
 ## Research Spec
 
-An 8-page technical paper is included: [`shielded-payments.pdf`](shielded-payments.pdf)
+Technical spec: [`shielded-payments.pdf`](shielded-payments.pdf)
 
 Covers: UTXO change mechanics, operator knowledge boundaries, privacy analysis, AI use cases (inference, image generation, agent execution, fine-tuning), cross-chain architecture, and cost comparison.
 
