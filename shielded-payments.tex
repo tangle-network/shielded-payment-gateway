@@ -82,24 +82,24 @@ Empty edge slots (unconnected chains) are filled with a deterministic zero hash.
 
 \begin{center}
 \begin{tikzpicture}[
-  box/.style={draw, rounded corners, minimum width=3cm, minimum height=1.1cm, align=center, font=\small},
+  box/.style={draw, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center, font=\small},
   arr/.style={-{Stealth[length=2.5mm]}, thick},
-  lbl/.style={font=\scriptsize, midway, above}
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt}
 ]
   \node[box] (pool) at (0,0) {VAnchor Pool\\{\scriptsize (audited~\cite{webb})}};
-  \node[box] (gw) at (4.5,0) {Shielded\\Gateway};
-  \node[box] (credits) at (9,0) {Shielded\\Credits};
-  \node[box, dashed] (user) at (0,2.5) {User\\{\scriptsize (ephemeral key)}};
-  \node[box, dashed] (op) at (9,-2.5) {Operator};
+  \node[box] (gw) at (5,0) {Shielded\\Gateway};
+  \node[box] (credits) at (10,0) {Shielded\\Credits};
+  \node[box, dashed] (user) at (0,2.8) {User\\{\scriptsize (ephemeral key)}};
+  \node[box, dashed] (op) at (10,-2.5) {Operator};
 
-  \draw[arr] (user) -- node[lbl] {ZK proof} (pool);
-  \draw[arr] (pool) -- node[lbl] {partial withdraw} (gw);
-  \draw[arr] (gw) -- node[lbl] {fund} (credits);
-  \draw[arr] (user) -| node[lbl, near start] {EIP-712 sig} (credits);
-  \draw[arr] (credits) -- node[lbl] {claim} (op);
+  \draw[arr] (user) -- node[lbl, right] {ZK proof} (pool);
+  \draw[arr] (pool) -- node[lbl, above, midway] {withdraw} (gw);
+  \draw[arr] (gw) -- node[lbl, above, midway] {fund} (credits);
+  \draw[arr] (user) -| node[lbl, above, near start] {EIP-712 sig} (credits);
+  \draw[arr] (credits) -- node[lbl, right, midway] {claim} (op);
 
   % Change UTXO loop
-  \draw[arr, dashed] (pool) to[bend right=40] node[lbl, below] {change UTXO} (pool);
+  \draw[arr, dashed] (pool) to[bend right=50] node[lbl, below] {change UTXO} (pool);
 \end{tikzpicture}
 \end{center}
 
