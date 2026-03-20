@@ -36,9 +36,13 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
 
     struct DepositInfo {
         address token;
-        uint256 balance;
+        uint256 balance; // D — RLN deposit (slashable by math)
+        uint256 policyStake; // S — policy stake (burnable by operator, NOT claimable)
         address depositor;
     }
+
+    /// @dev Dead address for policy stake burns — tokens are irrecoverable
+    address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     /// @notice identityCommitment => deposit info
     mapping(bytes32 => DepositInfo) public deposits;
@@ -115,6 +119,50 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
         info.balance += amount;
 
         emit Deposited(identityCommitment, token, amount);
+    }
+
+    /// @inheritdoc IRLNSettlement
+    function depositWithPolicy(
+        address token,
+        uint256 rlnAmount,
+        uint256 policyAmount,
+        bytes32 identityCommitment
+    )
+        external
+        nonReentrant
+    {
+        if (rlnAmount == 0 && policyAmount == 0) revert InsufficientDeposit(0, 0);
+
+        DepositInfo storage info = deposits[identityCommitment];
+
+        if (info.depositor == address(0)) {
+            info.token = token;
+            info.depositor = msg.sender;
+        } else {
+            if (info.token != token) revert InsufficientDeposit(0, rlnAmount + policyAmount);
+        }
+
+        uint256 total = rlnAmount + policyAmount;
+        IERC20(token).safeTransferFrom(msg.sender, address(this), total);
+        info.balance += rlnAmount;
+        info.policyStake += policyAmount;
+
+        emit Deposited(identityCommitment, token, total);
+    }
+
+    /// @inheritdoc IRLNSettlement
+    function burnPolicyStake(bytes32 identityCommitment, uint256 amount, bytes32 reason) external nonReentrant {
+        require(authorizedOperators[msg.sender], "not authorized operator");
+
+        DepositInfo storage info = deposits[identityCommitment];
+        require(amount > 0 && amount <= info.policyStake, "invalid burn amount");
+
+        info.policyStake -= amount;
+
+        // Burn: send to dead address. Operator receives NOTHING.
+        IERC20(info.token).safeTransfer(DEAD, amount);
+
+        emit PolicyStakeBurned(identityCommitment, msg.sender, amount, reason);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -246,9 +294,18 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
 
         // Only original depositor can withdraw (RLN Mode — future: ZK proof of identity)
         require(msg.sender == info.depositor, "not depositor");
-        if (amount > info.balance) revert InsufficientDeposit(info.balance, amount);
 
-        info.balance -= amount;
+        uint256 totalAvailable = info.balance + info.policyStake;
+        if (amount > totalAvailable) revert InsufficientDeposit(totalAvailable, amount);
+
+        // Withdraw from policy stake first, then RLN balance
+        if (amount <= info.policyStake) {
+            info.policyStake -= amount;
+        } else {
+            uint256 fromBalance = amount - info.policyStake;
+            info.policyStake = 0;
+            info.balance -= fromBalance;
+        }
 
         IERC20(info.token).safeTransfer(msg.sender, amount);
 
@@ -260,9 +317,13 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════
 
     /// @notice Get deposit balance for a commitment
-    function getDeposit(bytes32 identityCommitment) external view returns (address token, uint256 balance) {
+    function getDeposit(bytes32 identityCommitment)
+        external
+        view
+        returns (address token, uint256 balance, uint256 policyStake)
+    {
         DepositInfo storage info = deposits[identityCommitment];
-        return (info.token, info.balance);
+        return (info.token, info.balance, info.policyStake);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

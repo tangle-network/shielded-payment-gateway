@@ -17,6 +17,9 @@ interface IRLNSettlement {
     event BatchClaimed(address indexed operator, uint256 count, uint256 totalAmount);
     event Slashed(bytes32 indexed identityCommitment, address indexed slasher, uint256 amount);
     event Withdrawn(bytes32 indexed identityCommitment, address indexed recipient, uint256 amount);
+    event PolicyStakeBurned(
+        bytes32 indexed identityCommitment, address indexed operator, uint256 amount, bytes32 reason
+    );
 
     // ═══════════════════════════════════════════════════════════════════════
     // ERRORS
@@ -73,4 +76,24 @@ interface IRLNSettlement {
     /// @param amount Amount to withdraw
     /// @param proof Placeholder for withdrawal proof (unused in RLN Mode)
     function withdraw(bytes32 identityCommitment, uint256 amount, bytes calldata proof) external;
+
+    /// @notice Deposit both RLN deposit (D) and policy stake (S).
+    /// @param token ERC20 token address
+    /// @param rlnAmount Amount for the RLN deposit (D — slashable by math)
+    /// @param policyAmount Amount for the policy stake (S — burnable by operator)
+    /// @param identityCommitment keccak256(identitySecret)
+    function depositWithPolicy(
+        address token,
+        uint256 rlnAmount,
+        uint256 policyAmount,
+        bytes32 identityCommitment
+    )
+        external;
+
+    /// @notice Burn policy stake. Operator can burn S but CANNOT claim it.
+    /// @dev Tokens are sent to address(0xdead) — operator receives nothing.
+    /// @param identityCommitment The commitment whose policy stake to burn
+    /// @param amount Amount of policy stake to burn
+    /// @param reason Application-specific reason hash
+    function burnPolicyStake(bytes32 identityCommitment, uint256 amount, bytes32 reason) external;
 }

@@ -43,7 +43,7 @@ contract RLNSettlementTest is Test {
         vm.prank(depositor);
         settlement.deposit(address(token), 100 ether, identityCommitment);
 
-        (address t, uint256 bal) = settlement.getDeposit(identityCommitment);
+        (address t, uint256 bal,) = settlement.getDeposit(identityCommitment);
         assertEq(t, address(token));
         assertEq(bal, 100 ether);
         assertEq(token.balanceOf(address(settlement)), 100 ether);
@@ -56,7 +56,7 @@ contract RLNSettlementTest is Test {
         vm.prank(depositor);
         settlement.deposit(address(token), 30 ether, identityCommitment);
 
-        (, uint256 bal) = settlement.getDeposit(identityCommitment);
+        (, uint256 bal,) = settlement.getDeposit(identityCommitment);
         assertEq(bal, 80 ether);
     }
 
@@ -157,7 +157,7 @@ contract RLNSettlementTest is Test {
         settlement.finalizeSlash(slashId);
 
         assertEq(token.balanceOf(slasher), 100 ether);
-        (, uint256 bal) = settlement.getDeposit(identityCommitment);
+        (, uint256 bal,) = settlement.getDeposit(identityCommitment);
         assertEq(bal, 0);
     }
 
@@ -198,7 +198,7 @@ contract RLNSettlementTest is Test {
         vm.prank(depositor);
         settlement.withdraw(identityCommitment, 40 ether, "");
 
-        (, uint256 bal) = settlement.getDeposit(identityCommitment);
+        (, uint256 bal,) = settlement.getDeposit(identityCommitment);
         assertEq(bal, 60 ether);
         assertEq(token.balanceOf(depositor), 940 ether); // 1000 - 100 + 40
     }
@@ -219,5 +219,73 @@ contract RLNSettlementTest is Test {
         vm.prank(address(0xBEEF));
         vm.expectRevert("not depositor");
         settlement.withdraw(identityCommitment, 50 ether, "");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DUAL STAKING — POLICY STAKE
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function test_depositWithPolicy() public {
+        vm.prank(depositor);
+        settlement.depositWithPolicy(address(token), 80 ether, 20 ether, identityCommitment);
+
+        (address t, uint256 bal, uint256 policy) = settlement.getDeposit(identityCommitment);
+        assertEq(t, address(token));
+        assertEq(bal, 80 ether);
+        assertEq(policy, 20 ether);
+        assertEq(token.balanceOf(address(settlement)), 100 ether);
+    }
+
+    function test_burnPolicyStake_byOperator() public {
+        vm.prank(depositor);
+        settlement.depositWithPolicy(address(token), 80 ether, 20 ether, identityCommitment);
+
+        bytes32 reason = keccak256("spam");
+        vm.prank(operator);
+        settlement.burnPolicyStake(identityCommitment, 10 ether, reason);
+
+        (, uint256 bal, uint256 policy) = settlement.getDeposit(identityCommitment);
+        assertEq(bal, 80 ether); // RLN balance untouched
+        assertEq(policy, 10 ether); // 20 - 10
+    }
+
+    function test_burnPolicyStake_notOperator_reverts() public {
+        vm.prank(depositor);
+        settlement.depositWithPolicy(address(token), 80 ether, 20 ether, identityCommitment);
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("not authorized operator");
+        settlement.burnPolicyStake(identityCommitment, 10 ether, keccak256("reason"));
+    }
+
+    function test_burnPolicyStake_doesNotTransferToOperator() public {
+        vm.prank(depositor);
+        settlement.depositWithPolicy(address(token), 80 ether, 20 ether, identityCommitment);
+
+        uint256 operatorBalBefore = token.balanceOf(operator);
+        address dead = 0x000000000000000000000000000000000000dEaD;
+        uint256 deadBalBefore = token.balanceOf(dead);
+
+        vm.prank(operator);
+        settlement.burnPolicyStake(identityCommitment, 15 ether, keccak256("abuse"));
+
+        // Operator balance unchanged — receives nothing
+        assertEq(token.balanceOf(operator), operatorBalBefore);
+        // Dead address received the burned tokens
+        assertEq(token.balanceOf(dead), deadBalBefore + 15 ether);
+    }
+
+    function test_withdraw_includesPolicy() public {
+        vm.prank(depositor);
+        settlement.depositWithPolicy(address(token), 60 ether, 40 ether, identityCommitment);
+
+        // Withdraw 50 ether — should drain policy stake first (40), then 10 from balance
+        vm.prank(depositor);
+        settlement.withdraw(identityCommitment, 50 ether, "");
+
+        (, uint256 bal, uint256 policy) = settlement.getDeposit(identityCommitment);
+        assertEq(policy, 0); // Policy fully drained
+        assertEq(bal, 50 ether); // 60 - 10
+        assertEq(token.balanceOf(depositor), 950 ether); // 1000 - 100 + 50
     }
 }
