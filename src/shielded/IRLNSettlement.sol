@@ -71,6 +71,6 @@ interface IRLNSettlement {
     /// @notice Withdraw remaining deposit. Proof parameter reserved for future on-chain ZK verification.
     /// @param identityCommitment The commitment to withdraw from
     /// @param amount Amount to withdraw
-    /// @param proof Placeholder for withdrawal proof (unused in v2)
+    /// @param proof Placeholder for withdrawal proof (unused in RLN Mode)
     function withdraw(bytes32 identityCommitment, uint256 amount, bytes calldata proof) external;
 }

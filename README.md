@@ -23,6 +23,21 @@ Privacy-preserving payment system that enables users to pay for cloud services â
 
 The operator serves requests and claims payment, but never learns the user's wallet address, deposit history, or total balance.
 
+## Payment Modes
+
+The system supports two payment modes. Users choose per request based on their privacy requirements.
+
+| | **Credit Mode** (Prepaid Credits) | **RLN Mode** (Per-Request Proofs) |
+|---|---|---|
+| **Privacy** | Pseudonymous within session, unlinkable across sessions | Full per-request unlinkability |
+| **Per-request latency** | <100ms (ECDSA signature) | ~640ms (ZK proof, parallelizable to near-zero) |
+| **Per-request gas** | ~50k (on-chain) | 0 (batched settlement) |
+| **ZK proofs** | 1 per session | 1 per request (off-chain verified) |
+| **Abuse protection** | Nonce ordering | Shamir secret sharing (cryptoeconomic slashing) |
+| **Best for** | High-frequency, low-latency inference | Sensitive workloads (medical, legal, journalism) |
+
+Both modes coexist on the same operator. See [`examples/`](examples/) for runnable TypeScript code demonstrating each flow.
+
 ## Architecture
 
 ```

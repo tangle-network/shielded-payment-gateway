@@ -30,7 +30,7 @@
 \maketitle
 
 \begin{abstract}
-We present a privacy-preserving payment system for decentralized cloud services---LLM inference, image generation, compute---where users pay anonymously and operators serve requests without learning the payer's identity. The system composes three layers: (1)~a cross-chain UTXO-based shielded pool~\cite{webb} with variable-amount JoinSplit transactions and multi-stablecoin wrapping, (2)~a stateless gateway contract that bridges anonymous partial withdrawals to Tangle's Blueprint service lifecycle, and (3)~a prepaid credit scheme where a single zero-knowledge proof funds an account from which many jobs are authorized via EIP-712 signatures. We describe the deployed system (v1) and a planned upgrade to per-request unlinkability via Rate-Limiting Nullifiers~\cite{rln} composed with the existing audited VAnchor circuit (v2). The v1 construction requires no modifications to Tangle's audited core contracts and introduces under 1,000 lines of new Solidity.
+We present a privacy-preserving payment system for decentralized cloud services---LLM inference, image generation, compute---where users pay anonymously and operators serve requests without learning the payer's identity. The system composes three layers: (1)~a cross-chain UTXO-based shielded pool~\cite{webb} with variable-amount JoinSplit transactions and multi-stablecoin wrapping, (2)~a stateless gateway contract that bridges anonymous partial withdrawals to Tangle's Blueprint service lifecycle, and (3)~a prepaid credit scheme where a single zero-knowledge proof funds an account from which many jobs are authorized via EIP-712 signatures. We describe the deployed system (Credit Mode) and a planned upgrade to per-request unlinkability via Rate-Limiting Nullifiers~\cite{rln} composed with the existing audited VAnchor circuit (RLN Mode). The Credit Mode construction requires no modifications to Tangle's audited core contracts and introduces under 1,000 lines of new Solidity.
 \end{abstract}
 
 \tableofcontents
@@ -43,22 +43,22 @@ This is not hypothetical. Inference providers can profile users by query content
 
 Buterin and Crapis~\cite{zkapi} proposed \emph{ZK API Usage Credits}: deposit into a smart contract, generate a zero-knowledge proof per API call to authorize payment without revealing identity. The proposal achieves strong privacy---per-request unlinkability via Rate-Limiting Nullifiers---but requires a Groth16 proof per API call ($\sim$640ms generation, $\sim$300k gas on-chain).
 
-We present a two-phase approach that ships immediately (v1) while providing a clear upgrade path to per-request unlinkability (v2):
+We present a two-phase approach that ships immediately (Credit Mode) while providing a clear upgrade path to per-request unlinkability (RLN Mode):
 
 \begin{description}[nosep, leftmargin=1.5cm]
-  \item[v1 (deployed):] One ZK proof funds a pseudonymous credit account. Many ECDSA signatures authorize individual job payments ($\sim$50k gas each). Requests within a credit session share a pseudonym; sessions are unlinkable.
-  \item[v2 (planned):] Each request carries its own RLN-based ZK proof, verified off-chain by the operator. Zero on-chain transactions per request. Full per-request unlinkability. The RLN circuit~\cite{rln} composes with the audited VAnchor circuit~\cite{webb,veridise} with $\sim$100 new constraints.
+  \item[Credit Mode (deployed):] One ZK proof funds a pseudonymous credit account. Many ECDSA signatures authorize individual job payments ($\sim$50k gas each). Requests within a credit session share a pseudonym; sessions are unlinkable.
+  \item[RLN Mode (planned):] Each request carries its own RLN-based ZK proof, verified off-chain by the operator. Zero on-chain transactions per request. Full per-request unlinkability. The RLN circuit~\cite{rln} composes with the audited VAnchor circuit~\cite{webb,veridise} with $\sim$100 new constraints.
 \end{description}
 
 \subsection{Contributions}
 
 \begin{enumerate}[nosep]
   \item A UTXO-based privacy model with partial withdrawals producing unlinkable change notes, enabling incremental spending from a single deposit.
-  \item A two-phase payment scheme: one ZK proof amortized over many ECDSA-signed payments (v1), upgradeable to per-request RLN proofs verified off-chain (v2).
+  \item A two-phase payment scheme: one ZK proof amortized over many ECDSA-signed payments (Credit Mode), upgradeable to per-request RLN proofs verified off-chain (RLN Mode).
   \item A gateway architecture bridging VAnchor shielded pools to Tangle's service lifecycle with zero core protocol modifications.
   \item Multi-asset wrapping (USDC, USDT, DAI $\to$ single pool token) maximizing the anonymity set.
   \item A cross-chain bridge via LayerZero V2 with dynamic edge addition, supporting deposits on 8 chains.
-  \item An audit-preserving circuit composition strategy where the v2 upgrade reuses audited sub-circuits (VAnchor~\cite{veridise}, RLN~\cite{rlnaudit}) with $\sim$100 lines of new glue constraints.
+  \item An audit-preserving circuit composition strategy where the RLN Mode upgrade reuses audited sub-circuits (VAnchor~\cite{veridise}, RLN~\cite{rlnaudit}) with $\sim$100 lines of new glue constraints.
 \end{enumerate}
 
 \section{Preliminaries}
@@ -82,7 +82,7 @@ $$\mathsf{reconstruct}(\mathsf{cm}, \mathsf{path}(\mathsf{cm}), H) \in \mathbf{M
 The circuit is compiled with a fixed $k$ (currently $k=8$). Unoccupied edge slots are filled with a deterministic zero hash. New chains are added on-chain via \texttt{addEdge} without circuit recompilation or redeployment.
 \end{definition}
 
-\section{System Architecture (v1)}
+\section{System Architecture (Credit Mode)}
 
 \begin{center}
 \begin{tikzpicture}[
@@ -143,7 +143,7 @@ The gateway stores no persistent state mapping nullifiers to service or credit i
 
 \subsection{Shielded Credits}\label{sec:credits}
 
-The core v1 contribution: a prepaid credit system that amortizes one ZK proof across many service invocations.
+The core Credit Mode contribution: a prepaid credit system that amortizes one ZK proof across many service invocations.
 
 \begin{definition}[Credit Account]
 Identified by $\mathsf{C} = \mathsf{keccak256}(\mathsf{pk}_s \| \mathsf{salt})$ where $\mathsf{pk}_s$ is an ephemeral ECDSA public key and $\mathsf{salt} \xleftarrow{\$} \{0,1\}^{256}$. Account state: $(\mathsf{pk}_s, \mathsf{token}, \mathsf{balance}, \mathsf{nonce})$.
@@ -184,9 +184,9 @@ The operator knows \emph{what} was requested and \emph{how much} was paid, but n
 
 When credit account $\mathsf{C}_1$ is depleted, the user generates a new partial withdrawal from their shielded UTXO, creating $\mathsf{C}_2$ with a fresh ephemeral key. The two accounts are cryptographically unlinkable because they use different ephemeral keys, different commitments, different nullifiers, and the connecting change UTXO has fresh blinding. The anonymity set is the total number of depositors in the pool.
 
-\subsection{Limitations of v1}
+\subsection{Limitations of Credit Mode}
 
-\textbf{Intra-session linkability.} Multiple spends from the same $\mathsf{C}$ are linkable---the commitment is a pseudonym. Full per-request unlinkability requires a ZK proof per request (addressed in v2, Section~\ref{sec:v2}).
+\textbf{Intra-session linkability.} Multiple spends from the same $\mathsf{C}$ are linkable---the commitment is a pseudonym. Full per-request unlinkability requires a ZK proof per request (addressed in RLN Mode, Section~\ref{sec:v2}).
 
 \textbf{Operator sees request content.} Payment privacy does not imply computation privacy. TEE-based execution would address this orthogonally.
 
@@ -194,9 +194,9 @@ When credit account $\mathsf{C}_1$ is depleted, the user generates a new partial
 
 \textbf{No IP-level privacy.} Network-layer anonymity (Tor, Nym) is orthogonal and composable.
 
-\section{Per-Request Unlinkability via Rate-Limiting Nullifiers (v2)}\label{sec:v2}
+\section{Per-Request Unlinkability via Rate-Limiting Nullifiers (RLN Mode)}\label{sec:v2}
 
-The v1 system links requests within a credit session---the commitment $\mathsf{C}$ is a pseudonym shared across all requests from the same account. For sensitive workloads (medical queries, legal analysis, investigative journalism), even pseudonymous linkability is unacceptable. The v2 protocol eliminates intra-session linkability entirely: every request is cryptographically independent, with zero on-chain transactions per request.
+The Credit Mode system links requests within a credit session---the commitment $\mathsf{C}$ is a pseudonym shared across all requests from the same account. For sensitive workloads (medical queries, legal analysis, investigative journalism), even pseudonymous linkability is unacceptable. The RLN Mode protocol eliminates intra-session linkability entirely: every request is cryptographically independent, with zero on-chain transactions per request.
 
 \subsection{Definitions}
 
@@ -275,7 +275,7 @@ Total new constraints: $\sim$80 (3 Poseidon hashes + 1 comparison + 1 multiplica
 \subsection{Protocol}
 
 \begin{algorithm}[H]
-\caption{v2: Per-Request Unlinkable Payment}
+\caption{RLN Mode: Per-Request Unlinkable Payment}
 \begin{algorithmic}[1]
 \Statex \textbf{Setup} (one-time, on-chain):
 \State User deposits stablecoins into VAnchor pool, obtaining $\mathsf{UTXO}(v)$
@@ -328,6 +328,14 @@ The user can continue making requests as long as their cumulative \emph{actual} 
 
 The circuit verifies the refund total $R$ by checking the operator's signatures over individual refund values inside the ZK proof. This adds $\sim$20 constraints per accumulated refund ticket (one Poseidon hash + one ECDSA verification per ticket, batched via a Merkle root of refund tickets).
 
+\subsection{Proof Pre-Generation and Parallelism}
+
+The 640ms proof generation time is CPU-bound and embarrassingly parallelizable. The SDK maintains a pool of pre-generated proofs; the user never blocks on proof generation during a request. On an 8-core machine, 8 proofs complete in $\sim$640ms wall time, yielding an effective throughput of $\sim$12.5 proofs/second.
+
+The pre-generation strategy is straightforward: the SDK observes the user's remaining epoch budget and speculatively generates proofs for future epochs in background threads. When a request arrives, the SDK pops a pre-generated proof from the pool and immediately sends it to the operator. If the pool is empty (cold start), the user experiences one $\sim$640ms delay before the pipeline reaches steady state.
+
+This transforms the per-request latency profile from $\sim$640ms (sequential proof generation) to near-zero (proof pool hit), at the cost of speculative CPU usage that would otherwise be idle. The operator-side verification remains $\sim$5ms regardless.
+
 \subsection{Settlement Contract}
 
 The \texttt{RLNSettlement} contract ($\sim$200 lines) manages deposits, nullifiers, and slashing. It does \emph{not} verify ZK proofs on-chain---that is the operator's responsibility (backed by staking/slashing in Tangle's core protocol).
@@ -344,21 +352,21 @@ The \texttt{RLNSettlement} contract ($\sim$200 lines) manages deposits, nullifie
 \begin{center}
 \begin{tabular}{@{}lccc@{}}
 \toprule
-\textbf{Property} & \textbf{v1} & \textbf{v2} & \textbf{Notes} \\
+\textbf{Property} & \textbf{Credit Mode} & \textbf{RLN Mode} & \textbf{Notes} \\
 \midrule
 Depositor unlinkability & \checkmark & \checkmark & VAnchor provides both \\
 Inter-session unlinkability & \checkmark & \checkmark & Fresh keys / fresh nullifiers \\
 \textbf{Intra-session unlinkability} & \texttimes & \checkmark & \textbf{Key difference} \\
-Per-request on-chain tx & $\sim$50k gas & 0 (batched) & v2 settles periodically \\
-Per-request client latency & $<$100ms & $\sim$640ms & v2 generates ZK proof \\
+Per-request on-chain tx & $\sim$50k gas & 0 (batched) & RLN Mode settles periodically \\
+Per-request client latency & $<$100ms & $\sim$640ms & RLN Mode generates ZK proof \\
 Refund for unused capacity & \texttimes & \checkmark & Server-signed tickets \\
-Abuse protection & Nonce ordering & Shamir slashing & v2 is cryptoeconomic \\
-New audit surface & 1,000 LOC Sol. & $\sim$80 constraints & v2 reuses audited circuits \\
+Abuse protection & Nonce ordering & Shamir slashing & RLN Mode is cryptoeconomic \\
+New audit surface & 1,000 LOC Sol. & $\sim$80 constraints & RLN Mode reuses audited circuits \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Both versions coexist on the same operator. Users choose their privacy level per request: v1 for low-latency pseudonymous access, v2 for full per-request unlinkability.
+Both modes coexist on the same operator. Users choose their privacy level per request: Credit Mode for low-latency pseudonymous access, RLN Mode for full per-request unlinkability.
 
 \section{Use Cases}
 
@@ -396,18 +404,18 @@ Initial deployment: Ethereum, Arbitrum, Base, Hyperliquid, BSC. Room for 3 addit
 \midrule
 ZK proof per call~\cite{zkapi} & $\sim$300k (on-chain) & $\sim$640ms & Full \\
 VAnchor withdrawal per call & $\sim$300k (on-chain) & $\sim$640ms & Full \\
-\textbf{v1: Shielded Credits} & \textbf{$\sim$50k (on-chain)} & $<$\textbf{100ms} & \textbf{Pseudonymous} \\
-\textbf{v2: RLN (off-chain)} & \textbf{0 (batched)} & $\sim$\textbf{640ms} & \textbf{Full} \\
+\textbf{Credit Mode (Prepaid Credits)} & \textbf{$\sim$50k (on-chain)} & $<$\textbf{100ms} & \textbf{Pseudonymous} \\
+\textbf{RLN Mode (Per-Request Proofs)} & \textbf{0 (batched)} & $\sim$\textbf{640ms} & \textbf{Full} \\
 x402~\cite{x402} (no privacy) & $\sim$30k (on-chain) & $<$50ms & None \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-The v1 one-time proof cost is amortized over all jobs in a session. A \$50 credit account at \$0.10/call amortizes over 500 calls. The v2 proof cost is per-request but entirely client-side with zero on-chain gas.
+The Credit Mode one-time proof cost is amortized over all jobs in a session. A \$50 credit account at \$0.10/call amortizes over 500 calls. The RLN Mode proof cost is per-request but entirely client-side with zero on-chain gas.
 
 \section{Implementation}
 
-The v1 system is deployed as a standalone Foundry project at \texttt{tangle-network/shielded-payment-gateway}. It compiles against the audited protocol-solidity contracts (git submodule, unmodified) and requires no changes to Tangle's core protocol.
+The Credit Mode system is deployed as a standalone Foundry project at \texttt{tangle-network/shielded-payment-gateway}. It compiles against the audited protocol-solidity contracts (git submodule, unmodified) and requires no changes to Tangle's core protocol.
 
 \begin{center}
 \begin{tabular}{@{}lrl@{}}
@@ -415,22 +423,22 @@ The v1 system is deployed as a standalone Foundry project at \texttt{tangle-netw
 \textbf{Component} & \textbf{Lines} & \textbf{Audit status} \\
 \midrule
 VAnchor + TokenWrapper + Merkle & $\sim$3,000 & Veridise~\cite{veridise} \\
-RLN circuit (v2) & $\sim$500 & yAcademy~\cite{rlnaudit} \\
+RLN circuit (RLN Mode) & $\sim$500 & yAcademy~\cite{rlnaudit} \\
 OpenZeppelin 4.x / 5.x & --- & OpenZeppelin \\
 \midrule
-ShieldedGateway & 188 & New (v1) \\
-ShieldedCredits & 232 & New (v1) \\
-LayerZeroAnchorBridge & 260 & New (v1) \\
-Interfaces & 252 & New (v1) \\
+ShieldedGateway & 188 & New (Credit Mode) \\
+ShieldedCredits & 232 & New (Credit Mode) \\
+LayerZeroAnchorBridge & 260 & New (Credit Mode) \\
+Interfaces & 252 & New (Credit Mode) \\
 \midrule
-Glue constraints (v2) & $\sim$100 & Planned \\
+Glue constraints (RLN Mode) & $\sim$100 & Planned \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Test coverage: 65 Forge tests (v1, including 4 fuzz tests for financial invariants), 40 TypeScript SDK tests (including real Groth16 proof generation against 8-edge circuits in $\sim$640ms), and 5 billing E2E tests proving 100 sequential inference payments against ShieldedCredits.
+Test coverage: 65 Forge tests (Credit Mode, including 4 fuzz tests for financial invariants), 40 TypeScript SDK tests (including real Groth16 proof generation against 8-edge circuits in $\sim$640ms), and 5 billing E2E tests proving 100 sequential inference payments against ShieldedCredits.
 
-The v2 RLN circuit composition (\texttt{circuits/rln-payment/}) and settlement contract (\texttt{RLNSettlement.sol}) are included as working implementations. The composed circuit adds $\sim$80 constraints to the audited sub-circuits.
+The RLN Mode circuit composition (\texttt{circuits/rln-payment/}) and settlement contract (\texttt{RLNSettlement.sol}) are included as working implementations. The composed circuit adds $\sim$80 constraints to the audited sub-circuits.
 
 \begin{thebibliography}{10}
 \bibitem{webb} D.~Stone, ``Webb Protocol: A cross-chain private application and governance protocol,'' \emph{IACR ePrint 2023/260}, 2023.

@@ -1,6 +1,6 @@
 # Roadmap: Per-Request Unlinkability via RLN
 
-## Current State (v1 — Shipped)
+## Current State (Credit Mode — Shipped)
 
 **Privacy model:** Pseudonymous within a credit session, unlinkable across sessions.
 
@@ -10,7 +10,7 @@ Across sessions, different commitments are cryptographically unlinkable.
 
 **Cost:** One ZK proof per session (~640ms), one ECDSA signature per request (~50k gas on-chain).
 
-## Target State (v2 — RLN-Based)
+## Target State (RLN Mode — Per-Request Proofs)
 
 **Privacy model:** Full per-request unlinkability. Each API call is cryptographically
 unlinked from every other call, even from the same user in the same session.
@@ -116,10 +116,10 @@ Estimated new constraints: ~50-100. This is a **composition audit**, not a full 
 
 ## Backwards Compatibility
 
-The v1 ShieldedCredits system continues to work alongside RLN.
+The Credit Mode ShieldedCredits system continues to work alongside RLN Mode.
 Operators can support both:
-- EIP-712 SpendAuth (v1, cheap, pseudonymous)
-- RLN proof (v2, per-request unlinkability)
+- EIP-712 SpendAuth (Credit Mode, cheap, pseudonymous)
+- RLN proof (RLN Mode, per-request unlinkability)
 
 Users choose their privacy level per request.
 

@@ -6,7 +6,6 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-
 import { ITangle } from "../interfaces/ITangle.sol";
 import { IShieldedGateway } from "./IShieldedGateway.sol";
 import { IShieldedCredits } from "./IShieldedCredits.sol";
