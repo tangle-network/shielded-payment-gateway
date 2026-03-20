@@ -118,10 +118,30 @@ contract ShieldedGateway is IShieldedGateway, Ownable, ReentrancyGuard {
         emit ShieldedServiceFunded(serviceId, _pools[wrappedToken], amount);
     }
 
-    // NOTE: shieldedSubmitJob was removed. Per-job payments should use ShieldedCredits
-    // (fund once via shieldedFundCredits, then sign cheap EIP-712 spend authorizations per job).
-    // A VAnchor withdrawal per job is too expensive and the gateway cannot forward tokens
-    // to tnt-core's submitJob (which doesn't pull payment).
+    /// @notice Anonymously fund an RLN settlement deposit.
+    ///         Same pattern as shieldedFundCredits but targets RLNSettlement.
+    function shieldedFundRLN(
+        VAnchorProof calldata anchorProof,
+        bytes32 identityCommitment,
+        address rlnSettlement
+    ) external payable nonReentrant {
+        (address wrappedToken, uint256 amount) = _executeShieldedWithdrawal(anchorProof);
+
+        IERC20(wrappedToken).forceApprove(rlnSettlement, amount);
+        // Call RLNSettlement.deposit(token, amount, identityCommitment)
+        // The gateway is msg.sender, so the deposit is anonymous.
+        (bool success,) = rlnSettlement.call(
+            abi.encodeWithSignature(
+                "deposit(address,uint256,bytes32)",
+                wrappedToken,
+                amount,
+                identityCommitment
+            )
+        );
+        require(success, "RLN deposit failed");
+
+        emit ShieldedCreditsFunded(identityCommitment, _pools[wrappedToken], amount);
+    }
 
     /// @inheritdoc IShieldedGateway
     function shieldedFundCredits(
