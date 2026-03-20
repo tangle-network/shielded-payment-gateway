@@ -84,27 +84,39 @@ The circuit is compiled with a fixed $k$ (currently $k=8$). Unoccupied edge slot
 
 \section{System Architecture (Credit Mode)}
 
-\begin{center}
+\begin{figure}[h]
+\centering
 \begin{tikzpicture}[
-  box/.style={draw, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center, font=\small},
+  box/.style={draw, rounded corners, minimum width=2.6cm, minimum height=1cm, align=center, font=\small},
+  onchain/.style={box, fill=blue!8, draw=blue!40},
+  offchain/.style={box, dashed, draw=gray!60},
   arr/.style={-{Stealth[length=2.5mm]}, thick},
   lbl/.style={font=\scriptsize, fill=white, inner sep=1pt}
 ]
-  \node[box] (pool) at (0,0) {VAnchor Pool\\{\scriptsize (audited~\cite{webb})}};
-  \node[box] (gw) at (5,0) {Shielded\\Gateway};
-  \node[box] (credits) at (10,0) {Shielded\\Credits};
-  \node[box, dashed] (user) at (0,2.8) {User\\{\scriptsize (ephemeral key)}};
-  \node[box, dashed] (op) at (10,-2.5) {Operator};
+  \node[onchain] (pool) at (0,0) {VAnchor Pool\\{\scriptsize (shielded)}};
+  \node[onchain] (gw) at (4.5,0) {Shielded\\Gateway};
+  \node[onchain] (credits) at (9,0) {Shielded\\Credits};
+  \node[offchain] (user) at (0,2.5) {User};
+  \node[offchain] (op) at (9,-2.2) {Operator};
 
-  \draw[arr] (user) -- node[lbl, right] {ZK proof} (pool);
-  \draw[arr] (pool) -- node[lbl, above, midway] {withdraw} (gw);
-  \draw[arr] (gw) -- node[lbl, above, midway] {fund} (credits);
-  \draw[arr] (user) -| node[lbl, above, near start] {EIP-712 sig} (credits);
-  \draw[arr] (credits) -- node[lbl, right, midway] {claim} (op);
+  \draw[arr, blue!60] (user) -- node[lbl, right] {\textbf{1} ZK proof} (pool);
+  \draw[arr, blue!60] (pool) -- node[lbl, above] {\textbf{2} \$5} (gw);
+  \draw[arr, blue!60] (gw) -- node[lbl, above] {\textbf{3} fund} (credits);
+  \draw[arr, red!60] (user) -| node[lbl, above, near start] {\textbf{4} EIP-712 sig $\times N$} (credits);
+  \draw[arr, green!60!black] (credits) -- node[lbl, right] {\textbf{5} claim} (op);
 
-  \draw[arr, dashed] (pool) to[bend right=50] node[lbl, below] {change UTXO} (pool);
+  \draw[arr, dashed, blue!40] (pool) to[bend right=50] node[lbl, below] {\$95 change} (pool);
+
+  % Legend
+  \node[font=\scriptsize, anchor=west] at (-1.5,-1.8) {%
+    \textcolor{blue!60}{--- on-chain (1 tx)} \quad
+    \textcolor{red!60}{--- on-chain (per request)} \quad
+    \textcolor{green!60!black}{--- on-chain (per claim)}
+  };
 \end{tikzpicture}
-\end{center}
+\caption{Credit Mode: one ZK withdrawal funds a pseudonymous account. Subsequent payments are ECDSA signatures (\texttildelow50k gas each). Requests within a session share commitment $\mathsf{C}$ (pseudonymous linkability).}
+\label{fig:credit-mode}
+\end{figure}
 
 \subsection{UTXO Model and Partial Withdrawals}
 
@@ -180,6 +192,47 @@ Linkage between different credit accounts & \texttimes & \texttimes \\
 
 The operator knows \emph{what} was requested and \emph{how much} was paid, but not \emph{who} is paying. This is the ``cash at a store'' model: the merchant sees the transaction but cannot trace it to a bank account.
 
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  zone/.style={draw, rounded corners=6pt, minimum width=3.8cm, minimum height=3.5cm, align=center},
+  item/.style={font=\scriptsize, anchor=west},
+  arr/.style={-{Stealth[length=2mm]}, thick, gray!50}
+]
+  % User zone
+  \node[zone, fill=blue!5, draw=blue!30] (uz) at (0, 0) {};
+  \node[font=\small\bfseries, blue!60] at (0, 1.3) {User knows};
+  \node[item] at (-1.6, 0.7) {$\bullet$ Wallet address};
+  \node[item] at (-1.6, 0.2) {$\bullet$ Private key (sk)};
+  \node[item] at (-1.6,-0.3) {$\bullet$ All UTXO values};
+  \node[item] at (-1.6,-0.8) {$\bullet$ All request history};
+  \node[item] at (-1.6,-1.3) {$\bullet$ Refund receipts};
+
+  % Operator zone
+  \node[zone, fill=orange!5, draw=orange!30] (oz) at (5.5, 0) {};
+  \node[font=\small\bfseries, orange!60] at (5.5, 1.3) {Operator knows};
+  \node[item] at (3.9, 0.7) {$\bullet$ Request content};
+  \node[item] at (3.9, 0.2) {$\bullet$ Payment amount};
+  \node[item] at (3.9,-0.3) {$\bullet$ RLN nullifier};
+  \node[item] at (3.9,-0.8) {$\bullet$ Shamir share};
+
+  % Chain zone
+  \node[zone, fill=green!5, draw=green!30] (cz) at (11, 0) {};
+  \node[font=\small\bfseries, green!50!black] at (11, 1.3) {Chain observer sees};
+  \node[item] at (9.4, 0.7) {$\bullet$ Pool deposits};
+  \node[item] at (9.4, 0.2) {$\bullet$ Gateway txs};
+  \node[item] at (9.4,-0.3) {$\bullet$ Settlement deposits};
+  \node[item] at (9.4,-0.8) {$\bullet$ Batch claims};
+  \node[item] at (9.4,-1.3) {$\bullet$ Nullifier set};
+
+  % Arrows showing what DOESN'T flow
+  \draw[arr, dashed, red!40] (uz.east) -- node[font=\scriptsize, above, red!60] {identity hidden} (oz.west);
+  \draw[arr, dashed, red!40] (oz.east) -- node[font=\scriptsize, above, red!60] {requests hidden} (cz.west);
+\end{tikzpicture}
+\caption{Privacy boundaries. The shielded pool hides identity from the operator. Off-chain proof verification hides request content from the chain. No single party has complete information.}
+\label{fig:privacy-boundary}
+\end{figure}
+
 \subsection{Unlinkability Across Sessions}
 
 When credit account $\mathsf{C}_1$ is depleted, the user generates a new partial withdrawal from their shielded UTXO, creating $\mathsf{C}_2$ with a fresh ephemeral key. The two accounts are cryptographically unlinkable because they use different ephemeral keys, different commitments, different nullifiers, and the connecting change UTXO has fresh blinding. The anonymity set is the total number of depositors in the pool.
@@ -240,6 +293,99 @@ The key binding constraint $\mathsf{identitySecret} = \mathsf{sk}_{\mathsf{utxo}
 
 \paragraph{Why the user cannot inflate their balance.}
 The solvency proof references the UTXO's value, which is bound to a commitment in the on-chain Merkle tree. The circuit recomputes the commitment from the user's private inputs (amount, key, blinding) and verifies it exists in the tree. Lying about the amount produces a different commitment that is not in the tree---the proof fails.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, minimum width=2.4cm, minimum height=0.9cm, align=center, font=\small},
+  onchain/.style={box, fill=blue!8, draw=blue!40},
+  offchain/.style={box, fill=orange!8, draw=orange!40},
+  actor/.style={box, dashed, draw=gray!60},
+  arr/.style={-{Stealth[length=2.5mm]}, thick},
+  lbl/.style={font=\scriptsize, fill=white, inner sep=1pt},
+  phase/.style={font=\footnotesize\bfseries, anchor=west}
+]
+
+  % Phase labels
+  \node[phase] at (-2.2, 3.2) {Phase 1};
+  \node[phase] at (-2.2, 0.7) {Phase 2};
+  \node[phase] at (-2.2,-2.0) {Phase 3};
+
+  % Horizontal dividers
+  \draw[gray!30, dashed] (-2.2, 2.0) -- (11.5, 2.0);
+  \draw[gray!30, dashed] (-2.2,-0.8) -- (11.5,-0.8);
+
+  % Phase 1: Anonymous deposit (on-chain)
+  \node[onchain] (pool1) at (0.5, 3.2) {VAnchor\\Pool};
+  \node[onchain] (gw1) at (4, 3.2) {Gateway};
+  \node[onchain] (settle1) at (7.5, 3.2) {RLN\\Settlement};
+  \node[font=\scriptsize, gray] at (10.5, 3.2) {on-chain};
+
+  \draw[arr, blue!60] (pool1) -- node[lbl, above] {ZK withdraw \$5} (gw1);
+  \draw[arr, blue!60] (gw1) -- node[lbl, above] {deposit(\$5, idComm)} (settle1);
+  \draw[arr, dashed, blue!40] (pool1) to[bend right=30] node[lbl, below] {\$95 change} (pool1);
+
+  % Phase 2: Private requests (off-chain)
+  \node[actor] (user2) at (0.5, 0.7) {User};
+  \node[offchain] (proof2) at (4, 0.7) {RLN Proof\\{\scriptsize ($\sim$640ms)}};
+  \node[offchain] (op2) at (7.5, 0.7) {Operator\\{\scriptsize (verify $\sim$5ms)}};
+  \node[font=\scriptsize, gray] at (10.5, 0.7) {off-chain};
+
+  \draw[arr, orange!60] (user2) -- node[lbl, above] {generate} (proof2);
+  \draw[arr, orange!60] (proof2) -- node[lbl, above] {proof + request} (op2);
+  \draw[arr, orange!40, dashed] (op2) to[bend right=20] node[lbl, below] {\scriptsize refund receipt} (user2);
+
+  % Phase 3: Batch settlement (on-chain)
+  \node[offchain] (op3) at (4,-2.0) {Operator};
+  \node[onchain] (settle3) at (7.5,-2.0) {RLN\\Settlement};
+  \node[actor] (opwallet) at (10.5,-2.0) {Operator\\Wallet};
+  \node[font=\scriptsize, gray] at (1,-2.0) {on-chain};
+
+  \draw[arr, green!60!black] (op3) -- node[lbl, above] {batchClaim(nullifiers)} (settle3);
+  \draw[arr, green!60!black] (settle3) -- node[lbl, above] {\$\,$\sum C_i$} (opwallet);
+
+\end{tikzpicture}
+\caption{RLN Mode: three distinct phases. Phase 1 is one on-chain transaction (anonymous deposit). Phase 2 is entirely off-chain (unlimited unlinkable requests). Phase 3 is periodic on-chain settlement. The UTXO is never spent during Phase 2---it serves as collateral for the solvency proof.}
+\label{fig:rln-mode}
+\end{figure}
+
+Now add the circuit composition diagram.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+  subcircuit/.style={draw, rounded corners=4pt, minimum width=9cm, minimum height=1.4cm, align=center, font=\small},
+  audited/.style={subcircuit, fill=green!6, draw=green!50},
+  newcode/.style={subcircuit, fill=red!6, draw=red!40},
+  arr/.style={-{Stealth[length=2mm]}, thick, gray},
+  lbl/.style={font=\scriptsize}
+]
+  \node[audited] (vanchor) at (0, 2.5) {
+    \textbf{Sub-circuit A: VAnchor} {\scriptsize (Veridise audited, $\sim$38k constraints)}\\
+    {\scriptsize commitment $\leftarrow$ Poseidon(chainID, \textbf{amount}, pubKey, blinding) $\in$ Merkle tree}
+  };
+
+  \node[newcode] (glue) at (0, 0.5) {
+    \textbf{Glue Logic} {\scriptsize (\textbf{new}, $\sim$80 constraints)}\\
+    {\scriptsize \texttt{identitySecret === inPrivateKey[0]} \quad $\cdot$ \quad solvency check \quad $\cdot$ \quad EdDSA receipt}
+  };
+
+  \node[audited] (rln) at (0, -1.5) {
+    \textbf{Sub-circuit B: RLN} {\scriptsize (yAcademy audited, $\sim$2.4k constraints)}\\
+    {\scriptsize nullifier $\leftarrow$ Poseidon(sk, extNull) \quad share: $y = \text{sk} + a \cdot x$}
+  };
+
+  \draw[arr] (vanchor.south) -- node[lbl, right] {sk, amount} (glue.north);
+  \draw[arr] (glue.south) -- node[lbl, right] {identitySecret, extNull} (rln.north);
+
+  % Audit surface annotation
+  \node[font=\scriptsize, green!50!black, anchor=west] at (5.5, 2.5) {$\leftarrow$ audited};
+  \node[font=\scriptsize, red!60, anchor=west] at (5.5, 0.5) {$\leftarrow$ \textbf{audit surface}};
+  \node[font=\scriptsize, green!50!black, anchor=west] at (5.5, -1.5) {$\leftarrow$ audited};
+\end{tikzpicture}
+\caption{Circuit composition. The two audited sub-circuits are connected by $\sim$80 constraints of glue logic---the only new code requiring review. The key binding constraint (\texttt{identitySecret === inPrivateKey[0]}) ensures the RLN identity is the UTXO owner. Total: 49,115 constraints.}
+\label{fig:circuit-composition}
+\end{figure}
 
 \subsection{Formal Definitions}
 
