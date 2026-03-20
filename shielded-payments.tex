@@ -143,6 +143,7 @@ The \texttt{ShieldedGateway} is a stateless proxy between the VAnchor and Tangle
   \item \texttt{shieldedRequestService}: Create a Tangle service instance with the gateway as owner and ephemeral addresses as permitted callers.
   \item \texttt{shieldedFundService}: Top up an existing service's escrow.
   \item \texttt{shieldedFundCredits}: Fund a prepaid credit account (Section~\ref{sec:credits}).
+  \item \texttt{shieldedFundRLN}: Deposit collateral into the RLN settlement contract (Section~\ref{sec:v2}), binding the withdrawal to an identity commitment for rate-limited usage.
 \end{itemize}
 
 \begin{property}[Atomicity]
@@ -387,6 +388,9 @@ Now add the circuit composition diagram.
 \label{fig:circuit-composition}
 \end{figure}
 
+\paragraph{Key binding constraint.}
+The constraint $\texttt{identitySecret === inPrivateKey[0]}$ is the critical security invariant of the composed circuit. Without it, a user could register an RLN identity with one key while proving UTXO ownership (solvency) with a different key. This would allow a user who holds no funds to borrow a friend's UTXO proof and attach their own RLN identity, effectively spending someone else's deposit. By binding the RLN identity secret to the first input UTXO's private key, the circuit ensures that the entity performing rate-limited requests is the same entity whose collateral is at stake.
+
 \subsection{Formal Definitions}
 
 \begin{definition}[Epoch]
@@ -532,7 +536,8 @@ The \texttt{RLNSettlement} contract ($\sim$200 lines) manages deposits, nullifie
 \begin{itemize}[nosep]
   \item \texttt{deposit(token, amount, identityCommitment)}: User locks funds against their identity commitment.
   \item \texttt{batchClaim(nullifiers[], amounts[], operator)}: Operator submits accumulated request nullifiers and claims payment in bulk. Each nullifier is marked as used; duplicate nullifiers revert.
-  \item \texttt{slash(nullifier, x1, y1, x2, y2, identityCommitment)}: Anyone submits two distinct Shamir shares with the same nullifier. The contract recovers $\mathsf{sk}$, verifies $H(\mathsf{sk}) = \mathsf{identityCommitment}$, and transfers the user's deposit to the slasher.
+  \item \texttt{slash(nullifier, x1, y1, x2, y2, identityCommitment)}: Anyone submits two distinct Shamir shares with the same nullifier. The contract recovers $\mathsf{sk}$, verifies $H(\mathsf{sk}) = \mathsf{identityCommitment}$, and transfers the user's deposit to the slasher. A 1-day time-lock is enforced between slash submission and fund transfer to prevent self-slashing attacks where an operator fabricates duplicate shares against their own deposit to extract funds before legitimate claims settle.
+  \item \texttt{batchClaim(nullifiers[], amounts[], operator)}: Requires that $\mathsf{msg.sender}$ is an authorized operator registered in the Tangle core protocol. Unauthorized callers revert with \texttt{UnauthorizedOperator}. This prevents griefing attacks where a third party submits claims with manipulated amounts.
   \item \texttt{withdraw(identityCommitment, amount)}: User reclaims remaining deposit (minus claimed amounts).
 \end{itemize}
 
@@ -584,6 +589,36 @@ The circuit compiles with $\mathsf{maxEdges} = 7$ (8 chains including self). Uno
 
 Initial deployment: Ethereum, Arbitrum, Base, Hyperliquid, BSC. Room for 3 additional chains without circuit recompilation.
 
+\section{Batch Verification via SP1 zkVM}
+
+On-chain Groth16 verification costs $\sim$270k gas per transaction. When many users transact in the same settlement window, the operator (or a sequencer) can batch $N$ proofs into a single SP1 zkVM execution that verifies all $N$ Groth16 proofs inside the zkVM, then produces one succinct proof verified on-chain.
+
+\begin{construction}[SP1 Batch Verifier]
+The SP1 program~\cite{sp1} accepts as input $N$ tuples $\{(\pi_i, x_i)\}_{i=1}^N$ where $\pi_i$ is a Groth16 proof and $x_i$ are the public inputs. Inside the zkVM, the program:
+\begin{enumerate}[nosep]
+  \item Deserializes each proof and public input set.
+  \item Runs the BN254 pairing check for each $(\pi_i, x_i)$ against the hardcoded verification key.
+  \item Commits all $N$ nullifiers and public amounts as public outputs.
+\end{enumerate}
+The resulting SP1 proof is verified on-chain by the \texttt{BatchVerifier} contract ($\sim$120 lines), which reads the committed outputs and forwards them to the VAnchor/Settlement contracts.
+\end{construction}
+
+The compiled SP1 ELF binary is 179KB. Gas savings scale linearly with batch size:
+
+\begin{center}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+\textbf{Batch size ($N$)} & \textbf{Total gas} & \textbf{Gas per user} \\
+\midrule
+1 & $\sim$270k & 270k \\
+10 & $\sim$270k & 27k \\
+100 & $\sim$270k & 2.7k \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The on-chain verification cost is constant regardless of $N$---only the off-chain SP1 proving time grows (linearly). This makes high-throughput settlement economically viable even on L1 Ethereum.
+
 \section{Cost Analysis}
 
 \begin{center}
@@ -619,13 +654,17 @@ ShieldedGateway & 188 & New (Credit Mode) \\
 ShieldedCredits & 232 & New (Credit Mode) \\
 LayerZeroAnchorBridge & 260 & New (Credit Mode) \\
 Interfaces & 252 & New (Credit Mode) \\
+RLNSettlement & 225 & New (RLN Mode) \\
+BatchVerifier & 120 & New (SP1 Batch) \\
 \midrule
 Glue constraints (RLN Mode) & $\sim$100 & Planned \\
+\midrule
+\textbf{Total new Solidity} & \textbf{1,277} & \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Test coverage: 65 Forge tests (Credit Mode, including 4 fuzz tests for financial invariants), 40 TypeScript SDK tests (including real Groth16 proof generation against 8-edge circuits in $\sim$640ms), and 5 billing E2E tests proving 100 sequential inference payments against ShieldedCredits.
+Test coverage: 265 tests total---65 Forge tests (Credit Mode, including 4 fuzz tests for financial invariants), 40 TypeScript SDK tests (including real Groth16 proof generation against 8-edge circuits in $\sim$640ms), 5 billing E2E tests proving 100 sequential inference payments against ShieldedCredits, and additional unit/integration tests across RLN settlement, batch verification, and cross-chain bridge paths.
 
 The RLN Mode circuit composition (\texttt{circuits/rln-payment/}) and settlement contract (\texttt{RLNSettlement.sol}) are included as working implementations. The composed circuit adds $\sim$80 constraints to the audited sub-circuits.
 
@@ -651,6 +690,8 @@ The RLN Mode circuit composition (\texttt{circuits/rln-payment/}) and settlement
 \bibitem{groth16} J.~Groth, ``On the size of pairing-based non-interactive arguments,'' \emph{EUROCRYPT}, 2016.
 
 \bibitem{shamir} A.~Shamir, ``How to share a secret,'' \emph{Communications of the ACM}, 22(11):612--613, 1979.
+
+\bibitem{sp1} Succinct Labs, ``SP1: A performant, 100\% open-source, contributor-friendly zkVM,'' 2024. \url{https://docs.succinct.xyz/}
 \end{thebibliography}
 
 \end{document}
