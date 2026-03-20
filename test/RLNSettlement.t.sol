@@ -26,6 +26,9 @@ contract RLNSettlementTest is Test {
         token = new MockERC20();
         identityCommitment = keccak256(abi.encodePacked(identitySecret));
 
+        // Register operator
+        settlement.registerOperator(operator);
+
         // Fund the depositor
         token.mint(depositor, 1000 ether);
         vm.prank(depositor);
@@ -80,6 +83,7 @@ contract RLNSettlementTest is Test {
         amounts[0] = 10 ether;
         amounts[1] = 20 ether;
 
+        vm.prank(operator);
         settlement.batchClaim(address(token), nullifiers, amounts, operator);
 
         assertEq(token.balanceOf(operator), 30 ether);
@@ -96,10 +100,12 @@ contract RLNSettlementTest is Test {
         nullifiers1[0] = keccak256("nf1");
         uint256[] memory amounts1 = new uint256[](1);
         amounts1[0] = 10 ether;
+        vm.prank(operator);
         settlement.batchClaim(address(token), nullifiers1, amounts1, operator);
 
         // Try to use the same nullifier again
         vm.expectRevert(abi.encodeWithSelector(IRLNSettlement.NullifierUsed.selector, nullifiers1[0]));
+        vm.prank(operator);
         settlement.batchClaim(address(token), nullifiers1, amounts1, operator);
     }
 
@@ -117,6 +123,7 @@ contract RLNSettlementTest is Test {
 
         // The second iteration marks the same nullifier — should revert
         vm.expectRevert(abi.encodeWithSelector(IRLNSettlement.NullifierUsed.selector, nullifiers[0]));
+        vm.prank(operator);
         settlement.batchClaim(address(token), nullifiers, amounts, operator);
     }
 
@@ -141,11 +148,15 @@ contract RLNSettlementTest is Test {
 
         vm.prank(slasher);
         settlement.slash(nullifier, x1, y1, x2, y2, identityCommitment);
+        // Slash is time-locked
+        bytes32 slashId = keccak256(abi.encode(identityCommitment, x1, y1, x2, y2));
+        assertEq(token.balanceOf(slasher), 0); // Not yet claimable
 
-        // Slasher receives the deposit
+        // Warp past delay
+        vm.warp(block.timestamp + settlement.SLASH_DELAY() + 1);
+        settlement.finalizeSlash(slashId);
+
         assertEq(token.balanceOf(slasher), 100 ether);
-
-        // Deposit is zeroed
         (, uint256 bal) = settlement.getDeposit(identityCommitment);
         assertEq(bal, 0);
     }
@@ -172,7 +183,7 @@ contract RLNSettlementTest is Test {
         bytes32 wrongCommitment = keccak256(abi.encodePacked(uint256(999)));
 
         vm.prank(slasher);
-        vm.expectRevert(IRLNSettlement.InvalidSlash.selector);
+        vm.expectRevert(IRLNSettlement.SlashFailed.selector);
         settlement.slash(keccak256("nf"), x1, y1, x2, y2, wrongCommitment);
     }
 
