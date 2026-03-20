@@ -194,78 +194,171 @@ When credit account $\mathsf{C}_1$ is depleted, the user generates a new partial
 
 \textbf{No IP-level privacy.} Network-layer anonymity (Tor, Nym) is orthogonal and composable.
 
-\section{Upgrade Path: Per-Request Unlinkability via RLN}\label{sec:v2}
+\section{Per-Request Unlinkability via Rate-Limiting Nullifiers (v2)}\label{sec:v2}
 
-\subsection{Motivation}
+The v1 system links requests within a credit session---the commitment $\mathsf{C}$ is a pseudonym shared across all requests from the same account. For sensitive workloads (medical queries, legal analysis, investigative journalism), even pseudonymous linkability is unacceptable. The v2 protocol eliminates intra-session linkability entirely: every request is cryptographically independent, with zero on-chain transactions per request.
 
-The v1 system links requests within a credit session. For sensitive workloads---medical queries, legal analysis, investigative journalism---even pseudonymous linkability may be unacceptable. The v2 upgrade eliminates intra-session linkability entirely.
+\subsection{Definitions}
 
-\subsection{Rate-Limiting Nullifiers}
+\begin{definition}[Epoch]
+An epoch $e$ is a monotonically increasing index that partitions time into rate-limiting windows. A user may issue at most one request per epoch. Epochs may correspond to block ranges, time intervals, or application-defined windows.
+\end{definition}
 
-Rate-Limiting Nullifiers (RLN)~\cite{rln} use Shamir's Secret Sharing to enforce rate limits without identity:
+\begin{definition}[RLN Identity]
+A user's RLN identity is derived from their VAnchor UTXO commitment:
+$$\mathsf{identitySecret} = \mathsf{sk}_{\mathsf{vanchor}}$$
+$$\mathsf{identityCommitment} = H(\mathsf{identitySecret})$$
+This binds the RLN identity to the shielded pool deposit without introducing a new secret.
+\end{definition}
 
-\begin{itemize}[nosep]
-  \item Each request in epoch $e$ produces nullifier $\mathsf{rlnNull} = H(\mathsf{sk}, e)$ and reveals one Shamir share: $\mathsf{share} = \mathsf{sk} + a \cdot H(\mathsf{message})$ where $a = H(\mathsf{sk}, e)$.
-  \item A single request per epoch reveals one share---insufficient to recover $\mathsf{sk}$.
-  \item Two requests in the same epoch reveal two shares on a degree-1 polynomial, enabling recovery of $\mathsf{sk}$ and slashing the user's deposit.
-  \item Different epochs produce different nullifiers, providing \textbf{per-request unlinkability}.
-\end{itemize}
+\begin{definition}[External Nullifier]
+For epoch $e$ and application identifier $\mathsf{rlnId}$:
+$$\mathsf{extNull} = H(e, \mathsf{rlnId})$$
+The $\mathsf{rlnId}$ prevents cross-application nullifier collisions.
+\end{definition}
 
-\subsection{Circuit Composition}
-
-The key architectural insight: the VAnchor circuit (audited by Veridise~\cite{veridise}, $\sim$38k constraints) and the RLN circuit (audited by yAcademy~\cite{rlnaudit}, $\sim$5k constraints) are both Groth16 over BN254 using Poseidon. Composing them preserves the audit guarantees of each sub-circuit. The new audit surface is only the glue logic ($\sim$100 constraints):
-
-\begin{construction}[Composed VAnchor-RLN Circuit]\label{con:composed}
-The composed circuit includes three sub-circuits:
-
-\medskip\noindent
-\textbf{Sub-circuit A (VAnchor, audited):} Proves UTXO ownership, Merkle membership, nullifier correctness, and amount conservation. Outputs: $\mathsf{cm}$, $\mathsf{amount}$.
-
-\medskip\noindent
-\textbf{Glue logic (new, $\sim$100 constraints):}
+\begin{definition}[Rate-Limiting Nullifier and Share]
+For a request with message $m$ in epoch $e$:
 \begin{align}
-  \mathsf{identityCommitment} &:= H(\mathsf{cm}) \\
-  (\mathsf{epochIndex} + 1) \times C_{\max} &\leq \mathsf{amount} + R \quad\text{(solvency)}
+  \mathsf{rlnNull} &= H(\mathsf{identitySecret}, \mathsf{extNull}) \\
+  a &= H(\mathsf{identitySecret}, \mathsf{extNull}) \\
+  x &= H(m) \\
+  y &= \mathsf{identitySecret} + a \cdot x \pmod{p}
 \end{align}
-where $R$ is the accumulated refund balance and $C_{\max}$ is the maximum cost per request.
+The tuple $(\mathsf{rlnNull}, x, y)$ is revealed with the proof. A single share $(x, y)$ is information-theoretically insufficient to recover $\mathsf{identitySecret}$. Two distinct shares $(x_1, y_1)$ and $(x_2, y_2)$ from the same epoch yield:
+$$\mathsf{identitySecret} = \frac{y_2 - y_1}{x_2 - x_1} \pmod{p}$$
+\end{definition}
+
+\begin{definition}[Refund Ticket]
+After serving a request, the operator signs a refund ticket:
+$$r = \big(C_{\max} - C_{\mathsf{actual}},\; \sigma_{\mathsf{server}}\big)$$
+where $C_{\max}$ is the maximum per-request cost committed in the proof, $C_{\mathsf{actual}}$ is the realized cost, and $\sigma_{\mathsf{server}}$ is the operator's ECDSA signature over the refund value. The user accumulates refund tickets locally. Their total unlocks additional request capacity via the solvency constraint.
+\end{definition}
+
+\subsection{Composed Circuit}
+
+The composed circuit reuses two audited sub-circuits verbatim, adding only glue logic.
+
+\begin{construction}[VAnchor-RLN Payment Circuit]\label{con:composed}
+For public inputs:
+$$x = \{\mathsf{public\_amount}, \mathbf{MR}, i, \{\mathsf{sn}_k\}, \{\mathsf{cm}_o\}, \mathsf{rlnNull}, x_{\mathsf{share}}, y_{\mathsf{share}}, e, \mathsf{extDataHash}\}$$
+and private witness:
+$$\mathbf{w} = \mathbf{w}_{\mathsf{vanchor}} \cup \{\mathsf{identitySecret}, \mathsf{epochIndex}, C_{\max}, R, \{\mathsf{refundSigs}\}\}$$
+the relation $\mathcal{R}$ enforces:
+
+\medskip\noindent\textbf{Sub-circuit A} (VAnchor, $\sim$38k constraints, audited~\cite{veridise}):
+\begin{align}
+  &\text{UTXO commitments, nullifiers, Merkle membership, amount conservation}
+\end{align}
+Outputs the input UTXO values $\{v_k\}$ and the user's secret key $\mathsf{sk}$.
+
+\medskip\noindent\textbf{Glue} ($\sim$80 constraints, \textbf{new}):
+\begin{align}
+  \mathsf{identitySecret} &= \mathsf{sk} \label{eq:identity}\\
+  (\mathsf{epochIndex} + 1) \times C_{\max} &\leq \sum v_k + R \label{eq:solvency}\\
+  \mathsf{extNull} &= H(e, \mathsf{rlnId}) \label{eq:extnull}
+\end{align}
+
+Equation~\eqref{eq:identity} binds the RLN identity to the VAnchor secret key---no new key material. Equation~\eqref{eq:solvency} ensures the user has deposited enough (plus accumulated refunds $R$) to cover their next request at cost $C_{\max}$. Equation~\eqref{eq:extnull} computes the external nullifier from the epoch.
+
+\medskip\noindent\textbf{Sub-circuit B} (RLN, $\sim$5k constraints, audited~\cite{rlnaudit}):
+\begin{align}
+  \mathsf{rlnNull} &= H(\mathsf{identitySecret}, \mathsf{extNull}) \\
+  a &= H(\mathsf{identitySecret}, \mathsf{extNull}) \\
+  y_{\mathsf{share}} &= \mathsf{identitySecret} + a \cdot x_{\mathsf{share}} \pmod{p}
+\end{align}
 
 \medskip\noindent
-\textbf{Sub-circuit B (RLN, audited):} Takes $\mathsf{identityCommitment}$ as input. Produces $\mathsf{rlnNull} = H(\mathsf{sk}, \mathsf{epoch})$ and Shamir share. Enforces rate-limiting and enables slashing on double-signal.
+Total new constraints: $\sim$80 (3 Poseidon hashes + 1 comparison + 1 multiplication). The sub-circuit constraints are unchanged---existing audit findings apply without modification.
 \end{construction}
 
-\noindent The sub-circuit constraints are \emph{unchanged}---the glue only connects outputs of A to inputs of B and adds the solvency check. Existing audit findings carry over to the composed circuit. Only the glue logic requires new review.
+\subsection{Protocol}
 
-\subsection{v2 Protocol Flow}
+\begin{algorithm}[H]
+\caption{v2: Per-Request Unlinkable Payment}
+\begin{algorithmic}[1]
+\Statex \textbf{Setup} (one-time, on-chain):
+\State User deposits stablecoins into VAnchor pool, obtaining $\mathsf{UTXO}(v)$
+\State User registers $\mathsf{identityCommitment} = H(\mathsf{sk})$ in the RLN settlement contract
 
-\begin{enumerate}[nosep]
-  \item \textbf{Deposit} (on-chain, one-time): User deposits stablecoins into the VAnchor pool.
-  \item \textbf{Per-request proof} (client-side, $\sim$640ms): User generates a composed VAnchor-RLN proof. The proof demonstrates: UTXO ownership, solvency, and produces an RLN nullifier + Shamir share.
-  \item \textbf{Operator verification} (off-chain, $\sim$5ms): Operator checks the proof against the on-chain Merkle root, verifies the nullifier is fresh, and stores the Shamir share.
-  \item \textbf{Service delivery}: Operator serves the request.
-  \item \textbf{Refund ticket}: Operator signs a refund ticket $r = (C_{\max} - C_{\mathsf{actual}}, \sigma_{\mathsf{server}})$ for unused capacity. The user accumulates refund tickets locally to unlock further requests without additional deposits.
-  \item \textbf{Batch settlement} (on-chain, periodic): Operator submits accumulated nullifiers and claims payment in bulk. No per-request on-chain transaction.
-  \item \textbf{Slashing}: If a user double-signals in an epoch, two Shamir shares are revealed. Anyone can recover $\mathsf{sk}$ and slash the user's deposit.
-\end{enumerate}
+\Statex
+\Statex \textbf{Per-request} (off-chain, $\sim$640ms):
+\State $e \gets$ current epoch
+\State $m \gets H(\mathsf{request\_payload})$
+\State $\pi \gets \textsc{Prove}(\mathsf{pp}, x, \mathbf{w})$ \Comment{Composed VAnchor-RLN proof}
+\State User sends $(\pi, \mathsf{rlnNull}, x_{\mathsf{share}}, y_{\mathsf{share}}, e, \mathsf{request})$ to operator
 
-\subsection{v1 $\to$ v2 Comparison}
+\Statex
+\Statex \textbf{Operator verification} (off-chain, $\sim$5ms):
+\State $\textsc{Verify}(\mathsf{pp}, x, \pi) \stackrel{?}{=} 1$
+\State Check $\mathsf{MR}_{\mathsf{proof}} \in$ recent on-chain Merkle roots
+\State Check $\mathsf{rlnNull} \notin \mathsf{UsedNullifiers}$
+\State $\mathsf{UsedNullifiers} \gets \mathsf{UsedNullifiers} \cup \{\mathsf{rlnNull}\}$
+\State Store $(\mathsf{rlnNull}, x_{\mathsf{share}}, y_{\mathsf{share}})$ for slashing detection
+\State Serve request, compute $C_{\mathsf{actual}}$
+\State Sign refund ticket: $r \gets (C_{\max} - C_{\mathsf{actual}}, \sigma_{\mathsf{server}})$
+\State Return $(\mathsf{response}, r)$ to user
+
+\Statex
+\Statex \textbf{Batch settlement} (on-chain, periodic):
+\State Operator calls $\textsc{BatchClaim}(\{\mathsf{rlnNull}_i, C_{\max,i}\}_{i=1}^n, \mathsf{operator})$
+\State Contract marks nullifiers as used, transfers $\sum C_{\max,i}$ to operator
+
+\Statex
+\Statex \textbf{Slashing} (on-chain, permissionless):
+\If{two shares $(x_1, y_1), (x_2, y_2)$ exist for the same $\mathsf{rlnNull}$}
+  \State $\mathsf{sk} \gets (y_2 - y_1) \cdot (x_2 - x_1)^{-1} \pmod{p}$
+  \State Verify $H(\mathsf{sk}) = \mathsf{identityCommitment}$
+  \State Transfer user's deposit to slasher
+\EndIf
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Refund Accumulation}
+
+The solvency constraint (Eq.~\ref{eq:solvency}) gates the number of requests a user can make. Without refunds, a user with deposit $D$ and per-request cap $C_{\max}$ can make at most $\lfloor D / C_{\max} \rfloor$ requests. With refund accumulation, unused capacity is returned:
+
+After request $i$, the user holds refund tickets $\{r_1, \ldots, r_i\}$ with total value $R = \sum_{j=1}^{i} (C_{\max} - C_{\mathsf{actual},j})$. The solvency constraint for request $i+1$ requires:
+$$(i+1) \cdot C_{\max} \leq D + R$$
+
+Since $R = i \cdot C_{\max} - \sum C_{\mathsf{actual},j}$, this simplifies to:
+$$C_{\max} \leq D - \sum_{j=1}^{i} C_{\mathsf{actual},j}$$
+
+The user can continue making requests as long as their cumulative \emph{actual} cost does not exceed their deposit---regardless of how many requests they make or how large $C_{\max}$ is.
+
+The circuit verifies the refund total $R$ by checking the operator's signatures over individual refund values inside the ZK proof. This adds $\sim$20 constraints per accumulated refund ticket (one Poseidon hash + one ECDSA verification per ticket, batched via a Merkle root of refund tickets).
+
+\subsection{Settlement Contract}
+
+The \texttt{RLNSettlement} contract ($\sim$200 lines) manages deposits, nullifiers, and slashing. It does \emph{not} verify ZK proofs on-chain---that is the operator's responsibility (backed by staking/slashing in Tangle's core protocol).
+
+\begin{itemize}[nosep]
+  \item \texttt{deposit(token, amount, identityCommitment)}: User locks funds against their identity commitment.
+  \item \texttt{batchClaim(nullifiers[], amounts[], operator)}: Operator submits accumulated request nullifiers and claims payment in bulk. Each nullifier is marked as used; duplicate nullifiers revert.
+  \item \texttt{slash(nullifier, x1, y1, x2, y2, identityCommitment)}: Anyone submits two distinct Shamir shares with the same nullifier. The contract recovers $\mathsf{sk}$, verifies $H(\mathsf{sk}) = \mathsf{identityCommitment}$, and transfers the user's deposit to the slasher.
+  \item \texttt{withdraw(identityCommitment, amount)}: User reclaims remaining deposit (minus claimed amounts).
+\end{itemize}
+
+\subsection{Privacy Comparison}
 
 \begin{center}
-\begin{tabular}{@{}lcc@{}}
+\begin{tabular}{@{}lccc@{}}
 \toprule
-& \textbf{v1 (Credits)} & \textbf{v2 (RLN)} \\
+\textbf{Property} & \textbf{v1} & \textbf{v2} & \textbf{Notes} \\
 \midrule
-Per-request proof & ECDSA signature & Groth16 (off-chain) \\
-Per-request on-chain tx & $\sim$50k gas & None (batched) \\
-Per-request latency & $<$100ms & $\sim$640ms (client) \\
-Intra-session linkability & Yes (same $\mathsf{C}$) & No (per-request nullifier) \\
-Rate limiting & Nonce ordering & Shamir slashing \\
-Refund for unused capacity & No & Yes (server-signed tickets) \\
-New audit surface & 1,000 LOC Solidity & $\sim$100 circuit constraints \\
+Depositor unlinkability & \checkmark & \checkmark & VAnchor provides both \\
+Inter-session unlinkability & \checkmark & \checkmark & Fresh keys / fresh nullifiers \\
+\textbf{Intra-session unlinkability} & \texttimes & \checkmark & \textbf{Key difference} \\
+Per-request on-chain tx & $\sim$50k gas & 0 (batched) & v2 settles periodically \\
+Per-request client latency & $<$100ms & $\sim$640ms & v2 generates ZK proof \\
+Refund for unused capacity & \texttimes & \checkmark & Server-signed tickets \\
+Abuse protection & Nonce ordering & Shamir slashing & v2 is cryptoeconomic \\
+New audit surface & 1,000 LOC Sol. & $\sim$80 constraints & v2 reuses audited circuits \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Both versions coexist---operators can accept either v1 SpendAuth or v2 RLN proofs. Users choose their privacy level per request.
+Both versions coexist on the same operator. Users choose their privacy level per request: v1 for low-latency pseudonymous access, v2 for full per-request unlinkability.
 
 \section{Use Cases}
 
@@ -335,7 +428,9 @@ Glue constraints (v2) & $\sim$100 & Planned \\
 \end{tabular}
 \end{center}
 
-Test coverage: 65 Forge tests (including 4 fuzz tests for financial invariants) and 40 TypeScript SDK tests (including real Groth16 proof generation against 8-edge production circuits in $\sim$640ms).
+Test coverage: 65 Forge tests (v1, including 4 fuzz tests for financial invariants), 40 TypeScript SDK tests (including real Groth16 proof generation against 8-edge circuits in $\sim$640ms), and 5 billing E2E tests proving 100 sequential inference payments against ShieldedCredits.
+
+The v2 RLN circuit composition (\texttt{circuits/rln-payment/}) and settlement contract (\texttt{RLNSettlement.sol}) are included as working implementations. The composed circuit adds $\sim$80 constraints to the audited sub-circuits.
 
 \begin{thebibliography}{10}
 \bibitem{webb} D.~Stone, ``Webb Protocol: A cross-chain private application and governance protocol,'' \emph{IACR ePrint 2023/260}, 2023.
@@ -357,6 +452,8 @@ Test coverage: 65 Forge tests (including 4 fuzz tests for financial invariants) 
 \bibitem{poseidon} L.~Grassi \emph{et al.}, ``Poseidon: A new hash function for zero-knowledge proof systems,'' \emph{USENIX Security}, 2021.
 
 \bibitem{groth16} J.~Groth, ``On the size of pairing-based non-interactive arguments,'' \emph{EUROCRYPT}, 2016.
+
+\bibitem{shamir} A.~Shamir, ``How to share a secret,'' \emph{Communications of the ACM}, 22(11):612--613, 1979.
 \end{thebibliography}
 
 \end{document}
