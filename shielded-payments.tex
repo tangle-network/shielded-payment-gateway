@@ -196,9 +196,52 @@ When credit account $\mathsf{C}_1$ is depleted, the user generates a new partial
 
 \section{Per-Request Unlinkability via Rate-Limiting Nullifiers (RLN Mode)}\label{sec:v2}
 
-The Credit Mode system links requests within a credit session---the commitment $\mathsf{C}$ is a pseudonym shared across all requests from the same account. For sensitive workloads (medical queries, legal analysis, investigative journalism), even pseudonymous linkability is unacceptable. The RLN Mode protocol eliminates intra-session linkability entirely: every request is cryptographically independent, with zero on-chain transactions per request.
+Credit Mode links requests within a session. RLN Mode eliminates this: every request is cryptographically independent, with zero on-chain transactions per request.
 
-\subsection{Definitions}
+\subsection{How It Works (Intuition)}
+
+The RLN Mode flow has three phases, each operating at a different layer:
+
+\paragraph{Phase 1: Anonymous deposit (one on-chain transaction).}
+The user partially withdraws from the shielded pool through the gateway, which atomically deposits into the \texttt{RLNSettlement} contract:
+
+\begin{center}
+\small
+$\mathsf{UTXO}(\$100) \xrightarrow{\text{ZK proof}}
+\texttt{Gateway} \xrightarrow{\$5}
+\texttt{RLNSettlement}[\mathsf{idComm}]$
+\quad + \quad
+$\mathsf{UTXO}(\$95)$ back to pool
+\end{center}
+
+The settlement contract now holds \$5 under the user's \emph{identity commitment} $\mathsf{idComm} = H(\mathsf{sk})$. The shielded pool withdrawal breaks the link between the user's wallet and this deposit---the on-chain trace shows only $\texttt{VAnchor} \to \texttt{Gateway} \to \texttt{Settlement}$.
+
+The deposit is \textbf{not} the payment itself. It is collateral---a stake that guarantees the user will not abuse the system. The UTXO remains in the pool as proof of solvency.
+
+\paragraph{Phase 2: Private requests (off-chain, repeated).}
+For each API call, the user generates a ZK proof entirely off-chain:
+
+\begin{itemize}[nosep]
+  \item The proof demonstrates: ``I know a secret key $\mathsf{sk}$ that owns a UTXO in the VAnchor Merkle tree, and the UTXO's value satisfies the solvency constraint for my $N$th request.''
+  \item The proof produces an RLN nullifier $\mathsf{rlnNull} = H(\mathsf{sk}, H(\mathsf{epoch}, \mathsf{chainID}))$ and one Shamir share $(x, y)$.
+  \item The user sends the proof, nullifier, share, and request payload to the operator.
+  \item The operator verifies the proof in $\sim$5ms, checks the nullifier is fresh, serves the request, and issues a signed refund receipt for unused capacity.
+\end{itemize}
+
+\textbf{No on-chain transaction occurs.} The operator accumulates nullifiers and costs locally. Each request uses a different epoch, producing a different nullifier---requests are unlinkable. The UTXO is never spent; it serves as collateral for the solvency proof.
+
+\paragraph{Phase 3: Batch settlement (on-chain, periodic).}
+The operator periodically submits a batch of nullifiers and costs to the settlement contract:
+$$\textsc{BatchClaim}(\{\mathsf{rlnNull}_1, \ldots, \mathsf{rlnNull}_n\},\; \{C_1, \ldots, C_n\},\; \mathsf{operator})$$
+The contract marks nullifiers as used (preventing double-claims) and transfers $\sum C_i$ from the user's collateral deposit to the operator. If the deposit runs low, the user tops up via another anonymous gateway withdrawal.
+
+\paragraph{Why the user cannot cheat.}
+The key binding constraint $\mathsf{identitySecret} = \mathsf{sk}_{\mathsf{utxo}}$ ensures the RLN identity is the same key that owns the UTXO. If the user double-signals in the same epoch (e.g., to get two responses for one payment), two Shamir shares are revealed, the secret key is mathematically recoverable, and the user's deposit is slashed. The user also loses their shielded pool privacy---the recovered key can be used to identify their UTXOs in the Merkle tree.
+
+\paragraph{Why the user cannot inflate their balance.}
+The solvency proof references the UTXO's value, which is bound to a commitment in the on-chain Merkle tree. The circuit recomputes the commitment from the user's private inputs (amount, key, blinding) and verifies it exists in the tree. Lying about the amount produces a different commitment that is not in the tree---the proof fails.
+
+\subsection{Formal Definitions}
 
 \begin{definition}[Epoch]
 An epoch $e$ is a monotonically increasing index that partitions time into rate-limiting windows. A user may issue at most one request per epoch. Epochs may correspond to block ranges, time intervals, or application-defined windows.
