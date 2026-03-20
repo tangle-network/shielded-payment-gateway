@@ -80,7 +80,16 @@ template RLNPayment(levels, nIns, nOuts, zeroLeaf, length) {
     signal input receiptSigS;         // private: EdDSA signature S
 
     // -------------------------------------------------------
-    // RLN identity commitment (glue constraint 1)
+    // KEY BINDING (glue constraint 1) — CRITICAL
+    // -------------------------------------------------------
+    // The RLN identity MUST be the same key that owns the UTXO.
+    // Without this constraint, a user could use any identity for
+    // RLN while proving solvency with a different UTXO key.
+    // This would decouple rate-limiting from balance, breaking security.
+    identitySecret === inPrivateKey[0];
+
+    // -------------------------------------------------------
+    // RLN identity commitment (glue constraint 2)
     // -------------------------------------------------------
     signal identityCommitment;
     component idCommHasher = Poseidon(1);
