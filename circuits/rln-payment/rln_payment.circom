@@ -122,9 +122,13 @@ template RLNPayment(levels, nIns, nOuts, zeroLeaf, length) {
     // deposit = sum of input UTXO values (from VAnchor).
     // totalRefunds is verified by the operator's EdDSA signature above.
 
-    var deposit = 0;
-    for (var i = 0; i < nIns; i++) {
-        deposit += inAmount[i];
+    // Use OUTPUT amounts as the user's available balance after this transaction.
+    // For deposits: inputs are zero, outputs hold the deposited value.
+    // For withdrawals: inputs are spent, outputs hold the remaining value.
+    // The solvency check ensures the user's remaining balance covers future requests.
+    var availableBalance = 0;
+    for (var i = 0; i < nOuts; i++) {
+        availableBalance += outAmount[i];
     }
 
     signal epochCount;
@@ -134,7 +138,7 @@ template RLNPayment(levels, nIns, nOuts, zeroLeaf, length) {
     requiredBudget <== epochCount * maxCost;
 
     signal availableBudget;
-    availableBudget <== deposit + totalRefunds;
+    availableBudget <== availableBalance + totalRefunds;
 
     component solvencyCheck = LessEqThan(128);
     solvencyCheck.in[0] <== requiredBudget;
