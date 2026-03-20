@@ -1,0 +1,10 @@
+[package]
+name = "shielded-batch-program"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sp1-zkvm = "6.0.2"
+serde = { version = "1", features = ["derive"] }
+alloy-sol-types = "1"
+sha2 = "0.10"
