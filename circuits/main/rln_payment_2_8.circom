@@ -18,5 +18,6 @@ component main {public [
     share_x,
     share_y,
     epoch,
-    totalRefunds
+    operatorPubKeyX,
+    operatorPubKeyY
 ]} = RLNPayment(30, 2, 2, 11850551329423159860688778991827824730037759162201783566284850822760196767874, 8);
