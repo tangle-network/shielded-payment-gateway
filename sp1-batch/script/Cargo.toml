@@ -3,6 +3,9 @@ name = "shielded-batch-script"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+prove = []  # Enable to include the ELF binary (requires: cd program && cargo prove build)
+
 [dependencies]
 sp1-sdk = "6.0.2"
 serde = { version = "1", features = ["derive"] }
