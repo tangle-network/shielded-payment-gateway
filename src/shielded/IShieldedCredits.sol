@@ -67,6 +67,9 @@ interface IShieldedCredits {
     error TokenMismatch(address expected, address got);
     error OperatorRequired();
     error NotExpiredYet(uint64 expiry, uint256 currentTime);
+    error InvalidAmount();
+    error InvalidCommitment();
+    error CommitmentNotBound(bytes32 authHash);
     error InvalidSettlementAmount(uint256 reserved, uint256 requested);
     error CommitmentMismatch(bytes32 expected, bytes32 got);
 

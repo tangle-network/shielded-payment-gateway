@@ -59,7 +59,6 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
 
     struct PendingSpend {
         uint256 amount;
-        bytes32 commitment;
         address token;
         address operator;
         uint64 expiry;
@@ -68,6 +67,10 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
 
     /// @notice authHash => pending spend data
     mapping(bytes32 => PendingSpend) internal _pendingSpends;
+
+    /// @notice authHash => the credit account that funded the authorization.
+    /// @dev Keep this separate from PendingSpend so adding the binding does not shift its layout.
+    mapping(bytes32 => bytes32) internal _pendingCommitments;
 
     // ═══════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
@@ -92,6 +95,7 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
     /// @inheritdoc IShieldedCredits
     function fundCredits(address token, uint256 amount, bytes32 commitment, address spendingKey) external nonReentrant {
         if (amount == 0) revert InsufficientCredits(0, 0);
+        if (commitment == bytes32(0)) revert InvalidCommitment();
         if (spendingKey == address(0)) revert InvalidSignature();
 
         CreditAccount storage acct = _accounts[commitment];
@@ -126,6 +130,8 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
     /// @inheritdoc IShieldedCredits
     function authorizeSpend(SpendAuth calldata auth) external nonReentrant returns (bytes32 authHash) {
         if (auth.operator == address(0)) revert OperatorRequired();
+        if (auth.commitment == bytes32(0)) revert InvalidCommitment();
+        if (auth.amount == 0) revert InvalidAmount();
 
         CreditAccount storage acct = _accounts[auth.commitment];
         if (acct.spendingKey == address(0)) revert AccountNotFound(auth.commitment);
@@ -158,13 +164,9 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         // Store the authorization for later claim
         authHash = keccak256(abi.encode(auth.commitment, auth.serviceId, auth.jobIndex, auth.nonce));
         _pendingSpends[authHash] = PendingSpend({
-            amount: auth.amount,
-            commitment: auth.commitment,
-            token: acct.token,
-            operator: auth.operator,
-            expiry: auth.expiry,
-            claimed: false
+            amount: auth.amount, token: acct.token, operator: auth.operator, expiry: auth.expiry, claimed: false
         });
+        _pendingCommitments[authHash] = auth.commitment;
 
         emit CreditsSpent(auth.commitment, authHash, auth.amount, acct.balance);
     }
@@ -219,9 +221,11 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
 
         uint256 amount = spend.amount;
         spend.claimed = true;
-        _accounts[spend.commitment].balance += amount;
-        _accounts[spend.commitment].totalSpent -= amount;
-        emit PaymentReleased(authHash, spend.commitment, amount);
+        bytes32 commitment = _pendingCommitments[authHash];
+        if (commitment == bytes32(0)) revert CommitmentNotBound(authHash);
+        _accounts[commitment].balance += amount;
+        _accounts[commitment].totalSpent -= amount;
+        emit PaymentReleased(authHash, commitment, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -269,15 +273,11 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         if (spend.claimed) revert AlreadyClaimed(authHash);
         if (block.timestamp <= spend.expiry) revert NotExpiredYet(spend.expiry, block.timestamp);
 
-        bytes32 refundCommitment = spend.commitment;
-        // Rows created by the original contract version have no stored
-        // commitment. Preserve their explicit recovery argument while new
-        // rows bind recovery to the signed authorization.
-        if (refundCommitment == bytes32(0)) {
-            refundCommitment = commitment;
-        } else if (refundCommitment != commitment) {
-            revert CommitmentMismatch(refundCommitment, commitment);
-        }
+        bytes32 refundCommitment = _pendingCommitments[authHash];
+        // An older deployment cannot prove which account owns an unbound row.
+        // Refuse recovery instead of allowing the caller to choose the refund account.
+        if (refundCommitment == bytes32(0)) revert CommitmentNotBound(authHash);
+        if (refundCommitment != commitment) revert CommitmentMismatch(refundCommitment, commitment);
         _refundPending(spend, authHash, refundCommitment);
     }
 
@@ -314,8 +314,10 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         uint256 refund = spend.amount - amount;
         spend.claimed = true;
         if (refund > 0) {
-            _accounts[spend.commitment].balance += refund;
-            _accounts[spend.commitment].totalSpent -= refund;
+            bytes32 commitment = _pendingCommitments[authHash];
+            if (commitment == bytes32(0)) revert CommitmentNotBound(authHash);
+            _accounts[commitment].balance += refund;
+            _accounts[commitment].totalSpent -= refund;
         }
         if (amount > 0) IERC20(spend.token).safeTransfer(recipient, amount);
 

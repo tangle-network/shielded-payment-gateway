@@ -91,6 +91,12 @@ contract ShieldedCreditsTest is Test {
         credits.fundCredits(address(otherToken), 10 ether, commitment, spendingPubKey);
     }
 
+    function test_fundCredits_zeroCommitment_reverts() public {
+        vm.prank(funder);
+        vm.expectRevert(IShieldedCredits.InvalidCommitment.selector);
+        credits.fundCredits(address(token), CREDIT_AMOUNT, bytes32(0), spendingPubKey);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // SPENDING
     // ═══════════════════════════════════════════════════════════════════════
@@ -148,6 +154,14 @@ contract ShieldedCreditsTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(IShieldedCredits.InsufficientCredits.selector, CREDIT_AMOUNT, CREDIT_AMOUNT + 1)
         );
+        credits.authorizeSpend(auth);
+    }
+
+    function test_authorizeSpend_zeroAmount_reverts() public {
+        _fundAccount();
+
+        IShieldedCredits.SpendAuth memory auth = _signSpend(0, 64, 0, 0, 0);
+        vm.expectRevert(IShieldedCredits.InvalidAmount.selector);
         credits.authorizeSpend(auth);
     }
 
@@ -358,6 +372,35 @@ contract ShieldedCreditsTest is Test {
         bytes32 authHash = credits.authorizeSpend(auth);
 
         vm.expectRevert();
+        credits.reclaimExpiredAuth(authHash, commitment);
+    }
+
+    function test_reclaimExpiredAuth_wrongCommitment_reverts() public {
+        _fundAccount();
+
+        IShieldedCredits.SpendAuth memory auth = _signSpend(0, 64, 0, 1 ether, 0);
+        bytes32 authHash = credits.authorizeSpend(auth);
+        bytes32 wrongCommitment = keccak256("wrong-commitment");
+
+        vm.warp(block.timestamp + 3601);
+        vm.expectRevert(
+            abi.encodeWithSelector(IShieldedCredits.CommitmentMismatch.selector, commitment, wrongCommitment)
+        );
+        credits.reclaimExpiredAuth(authHash, wrongCommitment);
+    }
+
+    function test_reclaimExpiredAuth_unboundCommitment_reverts() public {
+        _fundAccount();
+
+        IShieldedCredits.SpendAuth memory auth = _signSpend(0, 64, 0, 1 ether, 0);
+        bytes32 authHash = credits.authorizeSpend(auth);
+
+        // Simulate a legacy row with no separate commitment binding.
+        bytes32 commitmentSlot = keccak256(abi.encode(authHash, uint256(3)));
+        vm.store(address(credits), commitmentSlot, bytes32(0));
+
+        vm.warp(block.timestamp + 3601);
+        vm.expectRevert(abi.encodeWithSelector(IShieldedCredits.CommitmentNotBound.selector, authHash));
         credits.reclaimExpiredAuth(authHash, commitment);
     }
 
