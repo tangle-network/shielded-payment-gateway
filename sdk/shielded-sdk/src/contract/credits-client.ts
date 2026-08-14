@@ -18,9 +18,12 @@ const CREDITS_ABI = [
   "function fundCredits(address token, uint256 amount, bytes32 commitment, address spendingKey) external",
   "function authorizeSpend(tuple(bytes32 commitment, uint64 serviceId, uint8 jobIndex, uint256 amount, address operator, uint256 nonce, uint64 expiry, bytes signature) auth) external returns (bytes32)",
   "function claimPayment(bytes32 authHash, address recipient) external",
+  "function settlePayment(bytes32 authHash, address recipient, uint256 amount) external",
+  "function releasePayment(bytes32 authHash) external",
+  "function reclaimExpiredAuth(bytes32 authHash, bytes32 commitment) external",
   "function withdrawCredits(bytes32 commitment, address recipient, uint256 amount, uint256 nonce, bytes signature) external",
   "function getAccount(bytes32 commitment) external view returns (tuple(address spendingKey, address token, uint256 balance, uint256 totalFunded, uint256 totalSpent, uint256 nonce))",
-  "function getSpendAuth(bytes32 authHash) external view returns (uint256 amount, bool claimed)",
+  "function getSpendAuth(bytes32 authHash) external view returns (uint256 amount, address token, address operator, uint64 expiry, bool claimed)",
   "function DOMAIN_SEPARATOR() external view returns (bytes32)",
 ];
 
@@ -242,6 +245,31 @@ export class ShieldedCreditsClient {
   /// Claim payment for a completed job
   async claimPayment(authHash: string, recipient: string): Promise<ethers.TransactionReceipt> {
     const tx = await this.contract.claimPayment(authHash, recipient);
+    return tx.wait();
+  }
+
+  /// Settle only the amount consumed by a completed job.
+  async settlePayment(
+    authHash: string,
+    recipient: string,
+    amount: bigint,
+  ): Promise<ethers.TransactionReceipt> {
+    const tx = await this.contract.settlePayment(authHash, recipient, amount);
+    return tx.wait();
+  }
+
+  /// Release an unconsumed authorization back to the credit account.
+  async releasePayment(authHash: string): Promise<ethers.TransactionReceipt> {
+    const tx = await this.contract.releasePayment(authHash);
+    return tx.wait();
+  }
+
+  /// Recover an authorization after its expiry.
+  async reclaimExpiredAuth(
+    authHash: string,
+    commitment: string,
+  ): Promise<ethers.TransactionReceipt> {
+    const tx = await this.contract.reclaimExpiredAuth(authHash, commitment);
     return tx.wait();
   }
 

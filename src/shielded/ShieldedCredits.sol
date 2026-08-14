@@ -59,6 +59,7 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
 
     struct PendingSpend {
         uint256 amount;
+        bytes32 commitment;
         address token;
         address operator;
         uint64 expiry;
@@ -157,7 +158,12 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         // Store the authorization for later claim
         authHash = keccak256(abi.encode(auth.commitment, auth.serviceId, auth.jobIndex, auth.nonce));
         _pendingSpends[authHash] = PendingSpend({
-            amount: auth.amount, token: acct.token, operator: auth.operator, expiry: auth.expiry, claimed: false
+            amount: auth.amount,
+            commitment: auth.commitment,
+            token: acct.token,
+            operator: auth.operator,
+            expiry: auth.expiry,
+            claimed: false
         });
 
         emit CreditsSpent(auth.commitment, authHash, auth.amount, acct.balance);
@@ -189,11 +195,33 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         //      correlation and auditability, not on-chain enforcement.
         if (msg.sender != spend.operator) revert NotDesignatedOperator(spend.operator, msg.sender);
 
+        _settlePayment(spend, authHash, recipient, spend.amount);
+    }
+
+    /// @inheritdoc IShieldedCredits
+    function settlePayment(bytes32 authHash, address recipient, uint256 amount) external nonReentrant {
+        PendingSpend storage spend = _pendingSpends[authHash];
+        if (spend.amount == 0) revert AuthNotFound(authHash);
+        if (spend.claimed) revert AlreadyClaimed(authHash);
+        if (block.timestamp > spend.expiry) revert SpendExpired(spend.expiry, block.timestamp);
+        if (msg.sender != spend.operator) revert NotDesignatedOperator(spend.operator, msg.sender);
+
+        _settlePayment(spend, authHash, recipient, amount);
+    }
+
+    /// @inheritdoc IShieldedCredits
+    function releasePayment(bytes32 authHash) external nonReentrant {
+        PendingSpend storage spend = _pendingSpends[authHash];
+        if (spend.amount == 0) revert AuthNotFound(authHash);
+        if (spend.claimed) revert AlreadyClaimed(authHash);
+        if (block.timestamp > spend.expiry) revert SpendExpired(spend.expiry, block.timestamp);
+        if (msg.sender != spend.operator) revert NotDesignatedOperator(spend.operator, msg.sender);
+
+        uint256 amount = spend.amount;
         spend.claimed = true;
-
-        IERC20(spend.token).safeTransfer(recipient, spend.amount);
-
-        emit PaymentClaimed(authHash, recipient, spend.amount);
+        _accounts[spend.commitment].balance += amount;
+        _accounts[spend.commitment].totalSpent -= amount;
+        emit PaymentReleased(authHash, spend.commitment, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -241,13 +269,16 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         if (spend.claimed) revert AlreadyClaimed(authHash);
         if (block.timestamp <= spend.expiry) revert NotExpiredYet(spend.expiry, block.timestamp);
 
-        uint256 amount = spend.amount;
-        spend.claimed = true;
-
-        _accounts[commitment].balance += amount;
-        _accounts[commitment].totalSpent -= amount;
-
-        emit CreditsReclaimed(authHash, commitment, amount);
+        bytes32 refundCommitment = spend.commitment;
+        // Rows created by the original contract version have no stored
+        // commitment. Preserve their explicit recovery argument while new
+        // rows bind recovery to the signed authorization.
+        if (refundCommitment == bytes32(0)) {
+            refundCommitment = commitment;
+        } else if (refundCommitment != commitment) {
+            revert CommitmentMismatch(refundCommitment, commitment);
+        }
+        _refundPending(spend, authHash, refundCommitment);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -275,5 +306,28 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
     {
         PendingSpend storage spend = _pendingSpends[authHash];
         return (spend.amount, spend.token, spend.operator, spend.expiry, spend.claimed);
+    }
+
+    function _settlePayment(PendingSpend storage spend, bytes32 authHash, address recipient, uint256 amount) internal {
+        if (amount > spend.amount) revert InvalidSettlementAmount(spend.amount, amount);
+
+        uint256 refund = spend.amount - amount;
+        spend.claimed = true;
+        if (refund > 0) {
+            _accounts[spend.commitment].balance += refund;
+            _accounts[spend.commitment].totalSpent -= refund;
+        }
+        if (amount > 0) IERC20(spend.token).safeTransfer(recipient, amount);
+
+        emit PaymentClaimed(authHash, recipient, amount);
+        emit PaymentSettled(authHash, recipient, amount, refund);
+    }
+
+    function _refundPending(PendingSpend storage spend, bytes32 authHash, bytes32 commitment) internal {
+        uint256 amount = spend.amount;
+        spend.claimed = true;
+        _accounts[commitment].balance += amount;
+        _accounts[commitment].totalSpent -= amount;
+        emit CreditsReclaimed(authHash, commitment, amount);
     }
 }

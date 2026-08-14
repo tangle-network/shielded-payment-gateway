@@ -228,6 +228,53 @@ contract ShieldedCreditsTest is Test {
         credits.claimPayment(fakeHash, operator1);
     }
 
+    function test_settlePayment_refundsUnusedReservation() public {
+        _fundAccount();
+        uint256 reserved = 5 ether;
+        uint256 actual = 2 ether;
+        bytes32 authHash = credits.authorizeSpend(_signSpend(0, 64, 0, reserved, 0));
+
+        vm.prank(operator1);
+        credits.settlePayment(authHash, operator1, actual);
+
+        IShieldedCredits.CreditAccountView memory acct = credits.getAccount(commitment);
+        assertEq(acct.balance, CREDIT_AMOUNT - actual);
+        assertEq(acct.totalSpent, actual);
+        assertEq(token.balanceOf(operator1), actual);
+        (,,,, bool claimed) = credits.getSpendAuth(authHash);
+        assertTrue(claimed);
+    }
+
+    function test_settlePayment_rejectsOvercharge() public {
+        _fundAccount();
+        uint256 reserved = 5 ether;
+        bytes32 authHash = credits.authorizeSpend(_signSpend(0, 64, 0, reserved, 0));
+
+        vm.prank(operator1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IShieldedCredits.InvalidSettlementAmount.selector, reserved, reserved + 1)
+        );
+        credits.settlePayment(authHash, operator1, reserved + 1);
+
+        IShieldedCredits.CreditAccountView memory acct = credits.getAccount(commitment);
+        assertEq(acct.balance, CREDIT_AMOUNT - reserved);
+        assertEq(acct.totalSpent, reserved);
+    }
+
+    function test_releasePayment_refundsFullReservation() public {
+        _fundAccount();
+        uint256 reserved = 5 ether;
+        bytes32 authHash = credits.authorizeSpend(_signSpend(0, 64, 0, reserved, 0));
+
+        vm.prank(operator1);
+        credits.releasePayment(authHash);
+
+        IShieldedCredits.CreditAccountView memory acct = credits.getAccount(commitment);
+        assertEq(acct.balance, CREDIT_AMOUNT);
+        assertEq(acct.totalSpent, 0);
+        assertEq(token.balanceOf(operator1), 0);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // WITHDRAWAL
     // ═══════════════════════════════════════════════════════════════════════
