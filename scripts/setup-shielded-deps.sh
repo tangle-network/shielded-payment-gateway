@@ -4,6 +4,8 @@
 # needed by protocol-solidity contracts.
 set -euo pipefail
 
+OZ4_COMMIT="dc44c9f1a4c3b10af99492eed84f83ed244203f6"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 DEPS_DIR="$ROOT_DIR/dependencies"
@@ -13,7 +15,7 @@ echo "Setting up shielded payments dependencies..."
 # 0. Install soldeer dependencies (OZ 5.x, forge-std)
 echo "  Running soldeer update..."
 cd "$ROOT_DIR"
-forge soldeer update 2>/dev/null || echo "  (soldeer update skipped — run manually if needed)"
+forge soldeer update
 
 # 1. Initialize protocol-solidity submodule
 echo "  Initializing protocol-solidity submodule..."
@@ -24,9 +26,10 @@ git submodule update --init dependencies/protocol-solidity
 OZ4_DIR="$DEPS_DIR/openzeppelin-contracts-4.9.6"
 if [ ! -d "$OZ4_DIR" ]; then
     echo "  Installing OpenZeppelin Contracts v4.9.6..."
-    git clone --depth 1 --branch v4.9.6 \
+    git clone --depth 1 --branch v4.9.6 --single-branch \
         https://github.com/OpenZeppelin/openzeppelin-contracts.git \
         "$OZ4_DIR"
+    test "$(git -C "$OZ4_DIR" rev-parse HEAD)" = "$OZ4_COMMIT"
     rm -rf "$OZ4_DIR/.git"
 else
     echo "  OpenZeppelin Contracts v4.9.6 already installed."

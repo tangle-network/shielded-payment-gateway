@@ -46,6 +46,8 @@ interface IShieldedCredits {
     event CreditsFunded(bytes32 indexed commitment, address indexed token, uint256 amount, uint256 newBalance);
     event CreditsSpent(bytes32 indexed commitment, bytes32 indexed authHash, uint256 amount, uint256 remaining);
     event PaymentClaimed(bytes32 indexed authHash, address indexed operator, uint256 amount);
+    event PaymentSettled(bytes32 indexed authHash, address indexed operator, uint256 amount, uint256 refund);
+    event PaymentReleased(bytes32 indexed authHash, bytes32 indexed commitment, uint256 amount);
     event CreditsWithdrawn(bytes32 indexed commitment, address indexed recipient, uint256 amount);
     event CreditsReclaimed(bytes32 indexed authHash, bytes32 indexed commitment, uint256 amount);
 
@@ -65,6 +67,11 @@ interface IShieldedCredits {
     error TokenMismatch(address expected, address got);
     error OperatorRequired();
     error NotExpiredYet(uint64 expiry, uint256 currentTime);
+    error InvalidAmount();
+    error InvalidCommitment();
+    error CommitmentNotBound(bytes32 authHash);
+    error InvalidSettlementAmount(uint256 reserved, uint256 requested);
+    error CommitmentMismatch(bytes32 expected, bytes32 got);
 
     // ═══════════════════════════════════════════════════════════════════════
     // FUNCTIONS
@@ -86,6 +93,16 @@ interface IShieldedCredits {
     /// @param authHash The spend authorization hash
     /// @param recipient The address to receive payment (typically the operator)
     function claimPayment(bytes32 authHash, address recipient) external;
+
+    /// @notice Settle only the amount actually consumed and refund the remainder.
+    /// @param authHash The spend authorization hash
+    /// @param recipient The operator payment recipient
+    /// @param amount The actual amount earned, at most the authorization amount
+    function settlePayment(bytes32 authHash, address recipient, uint256 amount) external;
+
+    /// @notice Release an unconsumed authorization back to its credit account.
+    /// @param authHash The spend authorization hash
+    function releasePayment(bytes32 authHash) external;
 
     /// @notice Withdraw unused credits back to an arbitrary address.
     /// @param commitment The credit account identifier

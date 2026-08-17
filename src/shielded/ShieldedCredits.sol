@@ -68,6 +68,10 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
     /// @notice authHash => pending spend data
     mapping(bytes32 => PendingSpend) internal _pendingSpends;
 
+    /// @notice authHash => the credit account that funded the authorization.
+    /// @dev Keep this separate from PendingSpend so adding the binding does not shift its layout.
+    mapping(bytes32 => bytes32) internal _pendingCommitments;
+
     // ═══════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR
     // ═══════════════════════════════════════════════════════════════════════
@@ -91,6 +95,7 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
     /// @inheritdoc IShieldedCredits
     function fundCredits(address token, uint256 amount, bytes32 commitment, address spendingKey) external nonReentrant {
         if (amount == 0) revert InsufficientCredits(0, 0);
+        if (commitment == bytes32(0)) revert InvalidCommitment();
         if (spendingKey == address(0)) revert InvalidSignature();
 
         CreditAccount storage acct = _accounts[commitment];
@@ -125,6 +130,8 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
     /// @inheritdoc IShieldedCredits
     function authorizeSpend(SpendAuth calldata auth) external nonReentrant returns (bytes32 authHash) {
         if (auth.operator == address(0)) revert OperatorRequired();
+        if (auth.commitment == bytes32(0)) revert InvalidCommitment();
+        if (auth.amount == 0) revert InvalidAmount();
 
         CreditAccount storage acct = _accounts[auth.commitment];
         if (acct.spendingKey == address(0)) revert AccountNotFound(auth.commitment);
@@ -159,6 +166,7 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         _pendingSpends[authHash] = PendingSpend({
             amount: auth.amount, token: acct.token, operator: auth.operator, expiry: auth.expiry, claimed: false
         });
+        _pendingCommitments[authHash] = auth.commitment;
 
         emit CreditsSpent(auth.commitment, authHash, auth.amount, acct.balance);
     }
@@ -189,11 +197,35 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         //      correlation and auditability, not on-chain enforcement.
         if (msg.sender != spend.operator) revert NotDesignatedOperator(spend.operator, msg.sender);
 
+        _settlePayment(spend, authHash, recipient, spend.amount);
+    }
+
+    /// @inheritdoc IShieldedCredits
+    function settlePayment(bytes32 authHash, address recipient, uint256 amount) external nonReentrant {
+        PendingSpend storage spend = _pendingSpends[authHash];
+        if (spend.amount == 0) revert AuthNotFound(authHash);
+        if (spend.claimed) revert AlreadyClaimed(authHash);
+        if (block.timestamp > spend.expiry) revert SpendExpired(spend.expiry, block.timestamp);
+        if (msg.sender != spend.operator) revert NotDesignatedOperator(spend.operator, msg.sender);
+
+        _settlePayment(spend, authHash, recipient, amount);
+    }
+
+    /// @inheritdoc IShieldedCredits
+    function releasePayment(bytes32 authHash) external nonReentrant {
+        PendingSpend storage spend = _pendingSpends[authHash];
+        if (spend.amount == 0) revert AuthNotFound(authHash);
+        if (spend.claimed) revert AlreadyClaimed(authHash);
+        if (block.timestamp > spend.expiry) revert SpendExpired(spend.expiry, block.timestamp);
+        if (msg.sender != spend.operator) revert NotDesignatedOperator(spend.operator, msg.sender);
+
+        uint256 amount = spend.amount;
         spend.claimed = true;
-
-        IERC20(spend.token).safeTransfer(recipient, spend.amount);
-
-        emit PaymentClaimed(authHash, recipient, spend.amount);
+        bytes32 commitment = _pendingCommitments[authHash];
+        if (commitment == bytes32(0)) revert CommitmentNotBound(authHash);
+        _accounts[commitment].balance += amount;
+        _accounts[commitment].totalSpent -= amount;
+        emit PaymentReleased(authHash, commitment, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -241,13 +273,12 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
         if (spend.claimed) revert AlreadyClaimed(authHash);
         if (block.timestamp <= spend.expiry) revert NotExpiredYet(spend.expiry, block.timestamp);
 
-        uint256 amount = spend.amount;
-        spend.claimed = true;
-
-        _accounts[commitment].balance += amount;
-        _accounts[commitment].totalSpent -= amount;
-
-        emit CreditsReclaimed(authHash, commitment, amount);
+        bytes32 refundCommitment = _pendingCommitments[authHash];
+        // An older deployment cannot prove which account owns an unbound row.
+        // Refuse recovery instead of allowing the caller to choose the refund account.
+        if (refundCommitment == bytes32(0)) revert CommitmentNotBound(authHash);
+        if (refundCommitment != commitment) revert CommitmentMismatch(refundCommitment, commitment);
+        _refundPending(spend, authHash, refundCommitment);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -275,5 +306,30 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
     {
         PendingSpend storage spend = _pendingSpends[authHash];
         return (spend.amount, spend.token, spend.operator, spend.expiry, spend.claimed);
+    }
+
+    function _settlePayment(PendingSpend storage spend, bytes32 authHash, address recipient, uint256 amount) internal {
+        if (amount > spend.amount) revert InvalidSettlementAmount(spend.amount, amount);
+
+        uint256 refund = spend.amount - amount;
+        spend.claimed = true;
+        if (refund > 0) {
+            bytes32 commitment = _pendingCommitments[authHash];
+            if (commitment == bytes32(0)) revert CommitmentNotBound(authHash);
+            _accounts[commitment].balance += refund;
+            _accounts[commitment].totalSpent -= refund;
+        }
+        if (amount > 0) IERC20(spend.token).safeTransfer(recipient, amount);
+
+        emit PaymentClaimed(authHash, recipient, amount);
+        emit PaymentSettled(authHash, recipient, amount, refund);
+    }
+
+    function _refundPending(PendingSpend storage spend, bytes32 authHash, bytes32 commitment) internal {
+        uint256 amount = spend.amount;
+        spend.claimed = true;
+        _accounts[commitment].balance += amount;
+        _accounts[commitment].totalSpent -= amount;
+        emit CreditsReclaimed(authHash, commitment, amount);
     }
 }
