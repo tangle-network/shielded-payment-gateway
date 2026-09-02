@@ -17,7 +17,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use sp1_sdk::{ProverClient, SP1Stdin};
+use sp1_sdk::blocking::{Elf, ProveRequest, Prover, ProverClient, SP1Stdin};
 use std::path::PathBuf;
 
 /// The ELF binary for the SP1 batch verification program.
@@ -84,6 +84,7 @@ struct BatchInput {
     proofs: Vec<Groth16Proof>,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug)]
 struct BatchOutput {
     tx_count: u32,
@@ -140,7 +141,10 @@ fn main() -> Result<()> {
     // 1. Read proof JSON files
     let proofs = load_proofs(&args.proofs_dir, args.max_batch_size)?;
     if proofs.is_empty() {
-        println!("No proofs found in {:?}, nothing to batch.", args.proofs_dir);
+        println!(
+            "No proofs found in {:?}, nothing to batch.",
+            args.proofs_dir
+        );
         return Ok(());
     }
     println!("Loaded {} proof(s)", proofs.len());
@@ -154,6 +158,7 @@ fn main() -> Result<()> {
     let batch_input = BatchInput { vkey, proofs };
 
     // 3. Generate SP1 proof
+    #[allow(clippy::const_is_empty)]
     if ELF.is_empty() {
         anyhow::bail!(
             "SP1 program ELF not built. Run: cd sp1-batch/program && cargo prove build\n\
@@ -163,7 +168,7 @@ fn main() -> Result<()> {
     println!("Generating SP1 batch proof...");
 
     let client = ProverClient::from_env();
-    let (pk, _vk) = client.setup(ELF);
+    let pk = client.setup(Elf::Static(ELF)).context("SP1 setup failed")?;
 
     let mut stdin = SP1Stdin::new();
     let input_bytes =
@@ -171,7 +176,7 @@ fn main() -> Result<()> {
     stdin.write_slice(&input_bytes);
 
     let proof = client
-        .prove(&pk, &stdin)
+        .prove(&pk, stdin)
         .groth16()
         .run()
         .context("SP1 proof generation failed")?;
@@ -185,8 +190,7 @@ fn main() -> Result<()> {
 
     // 4. Save proof to disk
     let output_path = args.proofs_dir.join("batch-proof.bin");
-    std::fs::write(&output_path, &proof_bytes)
-        .context("failed to write batch proof")?;
+    std::fs::write(&output_path, &proof_bytes).context("failed to write batch proof")?;
     println!("Batch proof saved to {}", output_path.display());
 
     if args.dry_run {
