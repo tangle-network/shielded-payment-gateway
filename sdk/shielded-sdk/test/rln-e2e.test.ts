@@ -34,7 +34,8 @@ import {
   computePublicAmount,
 } from "../src/proof/witness.js";
 
-const CIRCUIT_DIR = "/tmp/rln-circuit-test";
+const ROOT_DIR = join(import.meta.dirname, "../../../");
+const CIRCUIT_DIR = process.env.RLN_CIRCUIT_DIR ?? join(ROOT_DIR, "build/circuits/rln_payment_2_8");
 const WASM_PATH = join(CIRCUIT_DIR, "rln_payment_2_8_js/rln_payment_2_8.wasm");
 const ZKEY_PATH = join(CIRCUIT_DIR, "circuit_final.zkey");
 const VKEY_PATH = join(CIRCUIT_DIR, "verification_key.json");

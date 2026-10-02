@@ -26,11 +26,14 @@ async function main() {
   }
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
-  const signer = new ethers.Wallet(privateKey, provider);
+  // NonceManager pins nonces locally — a plain Wallet re-queries the node per
+  // tx and local nodes (anvil) can serve a lagging "pending" nonce between
+  // rapid sequential deploys, causing "nonce too low" failures.
+  const signer = new ethers.NonceManager(new ethers.Wallet(privateKey, provider));
   const chainId = (await provider.getNetwork()).chainId;
 
   console.log(`Deploying Poseidon libraries on chain ${chainId}...`);
-  console.log(`Deployer: ${signer.address}`);
+  console.log(`Deployer: ${await signer.getAddress()}`);
 
   // Dynamic import — circomlibjs is CJS
   const circomlibjs = await import("circomlibjs");

@@ -138,6 +138,16 @@ contract DeployShieldedPool is Script {
             ? json.readBool(".isNativeAllowed")
             : vm.envOr("IS_NATIVE_ALLOWED", false);
 
+        // --- VAnchor deposit/withdrawal limits ---
+        // Without initialize(), maximumDepositAmount defaults to 0 and every
+        // deposit reverts with "amount is larger than maximumDepositAmount".
+        uint256 minimumWithdrawalAmount = hasConfig
+            ? _jsonUintOr(json, ".minimumWithdrawalAmount", 0)
+            : vm.envOr("MIN_WITHDRAWAL_AMOUNT", uint256(0));
+        uint256 maximumDepositAmount = hasConfig
+            ? _jsonUintOr(json, ".maximumDepositAmount", type(uint256).max)
+            : vm.envOr("MAX_DEPOSIT_AMOUNT", type(uint256).max);
+
         // --- Stablecoins to register ---
         address[] memory stablecoins;
         if (hasConfig) {
@@ -239,6 +249,11 @@ contract DeployShieldedPool is Script {
         ));
         console2.log("VAnchorTree:", vanchorTree);
 
+        // Step 8b: Initialize deposit/withdrawal limits. Without this,
+        // maximumDepositAmount is 0 and every deposit reverts.
+        VAnchorTree(payable(vanchorTree)).initialize(minimumWithdrawalAmount, maximumDepositAmount);
+        console2.log("  Initialized: minWithdrawal", minimumWithdrawalAmount, "maxDeposit", maximumDepositAmount);
+
         // Step 9: Register VAnchorTree in AnchorHandler
         bytes32 anchorResourceId = _computeResourceId(vanchorTree);
         AnchorHandler(anchorHandler).setResource(anchorResourceId, vanchorTree);
@@ -328,6 +343,20 @@ contract DeployShieldedPool is Script {
         }
 
         return result;
+    }
+
+    /// @notice Read a uint from JSON, falling back to a default.
+    function _jsonUintOr(string memory json, string memory key, uint256 fallback_) internal view returns (uint256) {
+        try this._tryReadUint(json, key) returns (uint256 val) {
+            return val;
+        } catch {
+            return fallback_;
+        }
+    }
+
+    /// @notice External wrapper for json.readUint to use in try/catch.
+    function _tryReadUint(string calldata json, string calldata key) external view returns (uint256) {
+        return json.readUint(key);
     }
 
     /// @notice Read an address from JSON, falling back to a default.

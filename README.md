@@ -88,9 +88,23 @@ forge soldeer update
 # Build
 forge build
 
-# Test (104 tests)
+# Test
 forge test
 ```
+
+### Local end-to-end (real ZK proofs on Anvil)
+
+One command reproduces the full loop — trusted setup, artifact staging,
+contract build, and the complete payment lifecycle with real Groth16 proofs
+verified on-chain (deposit → anonymized credit funding → EIP-712 spend →
+operator claim → expiry reclaim → withdrawal):
+
+```bash
+./scripts/e2e-local.sh
+```
+
+The ceremony step is skipped automatically once `build/trusted-setup/` exists.
+See the script header for what a CI job needs (artifact caching).
 
 ### SDK
 
