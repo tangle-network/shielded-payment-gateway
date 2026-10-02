@@ -71,6 +71,24 @@ echo "  PoseidonT4: $POSEIDON_T4"
 echo "  PoseidonT5: $POSEIDON_T5"
 echo "  PoseidonT6: $POSEIDON_T6"
 
+# ─── Step 1b: Deploy VAnchorEncodeInputs library ───────────────────────────
+# VAnchorTree externally links VAnchorEncodeInputs (public library functions).
+# Without this the Forge script fails with "Dynamic linking not supported".
+echo ""
+echo "Step 1b: Deploying VAnchorEncodeInputs library..."
+ENCODE_INPUTS_FILE="$ROOT_DIR/deploy/output/vanchor-encode-inputs-${CHAIN_ID}.json"
+
+if [ -f "$ENCODE_INPUTS_FILE" ]; then
+    VANCHOR_ENCODE_INPUTS=$(jq -r '.address' "$ENCODE_INPUTS_FILE")
+    echo "  VAnchorEncodeInputs already deployed: $VANCHOR_ENCODE_INPUTS"
+else
+    VANCHOR_ENCODE_INPUTS=$(FOUNDRY_VIA_IR=false forge create --broadcast --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
+        "dependencies/protocol-solidity/packages/contracts/contracts/libs/VAnchorEncodeInputs.sol:VAnchorEncodeInputs" \
+        | jq -r '.deployedTo')
+    echo "{\"address\": \"$VANCHOR_ENCODE_INPUTS\"}" > "$ENCODE_INPUTS_FILE"
+    echo "  VAnchorEncodeInputs: $VANCHOR_ENCODE_INPUTS"
+fi
+
 # ─── Step 2: Deploy Verifiers ──────────────────────────────────────────────
 echo ""
 echo "Step 2: Deploying Verifier contracts..."
@@ -92,12 +110,12 @@ else
 
     # Deploy individual verifiers (2-input and 16-input for 8-edge circuits)
     echo "  Deploying Verifier8_2..."
-    V8_2=$(forge create --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
+    V8_2=$(forge create --broadcast --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
         "$VERIFIERS_DIR/poseidon_vanchor_2_8_verifier.sol:Verifier8_2" \
         | jq -r '.deployedTo')
 
     echo "  Deploying Verifier8_16..."
-    V8_16=$(forge create --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
+    V8_16=$(forge create --broadcast --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
         "$VERIFIERS_DIR/poseidon_vanchor_16_8_verifier.sol:Verifier8_16" \
         | jq -r '.deployedTo')
 
@@ -108,7 +126,7 @@ else
 
     if [ -f "$V2_2_SOL" ]; then
         echo "  Deploying Verifier2_2..."
-        V2_2=$(forge create --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
+        V2_2=$(forge create --broadcast --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
             "$V2_2_SOL:Verifier2_2" \
             | jq -r '.deployedTo')
     else
@@ -118,7 +136,7 @@ else
 
     if [ -f "$V2_16_SOL" ]; then
         echo "  Deploying Verifier2_16..."
-        V2_16=$(forge create --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
+        V2_16=$(forge create --broadcast --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
             "$V2_16_SOL:Verifier2_16" \
             | jq -r '.deployedTo')
     else
@@ -165,6 +183,7 @@ forge script script/DeployShieldedPool.s.sol:DeployShieldedPool \
     --libraries "protocol-solidity/hashers/Poseidon.sol:PoseidonT4:$POSEIDON_T4" \
     --libraries "protocol-solidity/hashers/Poseidon.sol:PoseidonT5:$POSEIDON_T5" \
     --libraries "protocol-solidity/hashers/Poseidon.sol:PoseidonT6:$POSEIDON_T6" \
+    --libraries "protocol-solidity/libs/VAnchorEncodeInputs.sol:VAnchorEncodeInputs:$VANCHOR_ENCODE_INPUTS" \
     2>&1 | tee "$ROOT_DIR/deploy/output/deploy-${CHAIN_ID}.log"
 
 # ─── Step 4: Verify deployment ────────────────────────────────────────────

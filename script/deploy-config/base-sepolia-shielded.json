@@ -30,6 +30,9 @@
   "feePercentage": 0,
   "isNativeAllowed": false,
 
+  "minimumWithdrawalAmount": 0,
+  "maximumDepositAmount": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+
   "stablecoins": [
     "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
   ],

@@ -76,12 +76,16 @@ check_deps() {
         exit 1
     fi
 
-    # Check snarkjs is available
-    if ! npx snarkjs --version &>/dev/null 2>&1; then
+    # Check snarkjs is available.
+    # NOTE: snarkjs exits non-zero even for `--version`, so test the output text.
+    local snarkjs_version
+    snarkjs_version=$(npx snarkjs --version 2>&1 || true)
+    if ! grep -q "snarkjs@" <<<"$snarkjs_version"; then
         echo "Installing snarkjs..."
         npm install -g snarkjs@latest
+        snarkjs_version=$(npx snarkjs --version 2>&1 || true)
     fi
-    echo "  snarkjs: $(npx snarkjs --version 2>/dev/null || echo 'installed')"
+    echo "  snarkjs: $(grep -m1 'snarkjs@' <<<"$snarkjs_version" || echo 'installed')"
 
     # Check circom
     CIRCOM_BIN="${CIRCOM_BIN:-}"
@@ -123,7 +127,7 @@ download_ptau() {
     echo "Downloading Hermez powers-of-tau (2^${PTAU_SIZE})..."
     mkdir -p "$BUILD_DIR"
 
-    local url="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_${PTAU_SIZE}.ptau"
+    local url="https://circom.info/powersOfTau28_hez_final_${PTAU_SIZE}.ptau"
     if command -v curl &>/dev/null; then
         curl -L --progress-bar -o "$ptau_file" "$url"
     elif command -v wget &>/dev/null; then
@@ -187,7 +191,18 @@ phase2_ceremony() {
     local zkey_dir="$ZKEYS_OUT/$circuit_name"
     local final_zkey="$zkey_dir/circuit_final.zkey"
 
-    if [ -f "$final_zkey" ]; then
+    # poseidon_vanchor_2_2  => Verifier2_2   (edges=2, inputs=2)
+    # poseidon_vanchor_16_2 => Verifier2_16  (edges=2, inputs=16)
+    # poseidon_vanchor_2_8  => Verifier8_2   (edges=8, inputs=2)
+    # poseidon_vanchor_16_8 => Verifier8_16  (edges=8, inputs=16)
+    local verifier_name
+    verifier_name=$(echo "$circuit_name" | sed -E 's/poseidon_vanchor_([0-9]+)_([0-9]+)/Verifier\2_\1/')
+
+    # Only skip when ALL outputs exist: final zkey, verification key, and a
+    # renamed Solidity verifier. (A previous run may have died mid-export.)
+    if [ -f "$final_zkey" ] \
+        && [ -f "$VKEYS_OUT/${circuit_name}_verification_key.json" ] \
+        && grep -q "contract ${verifier_name} " "$VERIFIERS_OUT/${circuit_name}_verifier.sol" 2>/dev/null; then
         echo "  Phase 2 already complete: $circuit_name"
         return
     fi
@@ -201,6 +216,9 @@ phase2_ceremony() {
         exit 1
     fi
 
+    # Skip the expensive setup/contribute/beacon steps if the final zkey
+    # already exists (previous run died during export).
+    if [ ! -f "$final_zkey" ]; then
     # Initial setup
     echo "    Groth16 setup..."
     npx snarkjs groth16 setup \
@@ -229,6 +247,7 @@ phase2_ceremony() {
     # Final verification
     echo "    Final verification..."
     npx snarkjs zkey verify "$r1cs" "$ptau_file" "$final_zkey"
+    fi
 
     # Export verification key
     mkdir -p "$VKEYS_OUT"
@@ -242,16 +261,13 @@ phase2_ceremony() {
         "$final_zkey" \
         "$VERIFIERS_OUT/${circuit_name}_verifier.sol"
 
-    # Rename the contract to match protocol-solidity convention.
-    # poseidon_vanchor_2_2  => Verifier2_2   (edges=2, inputs=2)
-    # poseidon_vanchor_16_2 => Verifier2_16  (edges=2, inputs=16)
-    # poseidon_vanchor_2_8  => Verifier8_2   (edges=8, inputs=2)
-    # poseidon_vanchor_16_8 => Verifier8_16  (edges=8, inputs=16)
-    local verifier_name
-    verifier_name=$(echo "$circuit_name" | sed -E 's/poseidon_vanchor_([0-9]+)_([0-9]+)/Verifier\2_\1/')
-    sed -i "s/contract Verifier/contract ${verifier_name}/" \
+    # Portable in-place sed (GNU uses `-i`, BSD/macOS uses `-i ''`)
+    local sed_i=(sed -i)
+    if sed --version 2>/dev/null | grep -q GNU; then sed_i=(sed -i); else sed_i=(sed -i ''); fi
+    # snarkjs >= 0.7 names the contract Groth16Verifier; older versions use Verifier
+    "${sed_i[@]}" -E "s/contract (Groth16Verifier|Verifier) /contract ${verifier_name} /" \
         "$VERIFIERS_OUT/${circuit_name}_verifier.sol"
-    sed -i 's/pragma solidity ^0.6.11;/pragma solidity ^0.8.18;/' \
+    "${sed_i[@]}" 's/pragma solidity ^0.6.11;/pragma solidity ^0.8.18;/' \
         "$VERIFIERS_OUT/${circuit_name}_verifier.sol"
 
     # Clean up intermediate zkeys to save disk space

@@ -127,12 +127,13 @@ describe.skipIf(SKIP)("Anvil E2E: Full Shielded Payment Lifecycle", () => {
     }
 
     // Use NonceManager to handle nonce tracking across rapid deploys
-    
-    // Anvil default accounts
-    deployer = new ethers.Wallet(
-      "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-      provider
-    );
+    // (JsonRpcProvider can serve a stale cached nonce between quick txs)
+    deployer = new ethers.NonceManager(
+      new ethers.Wallet(
+        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+        provider
+      )
+    ) as unknown as ethers.Wallet;
     operator = new ethers.Wallet(
       "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
       provider
@@ -246,10 +247,11 @@ describe.skipIf(SKIP)("Anvil E2E: Full Shielded Payment Lifecycle", () => {
       deployer
     );
     const creditsAddr = await credits.getAddress();
+    const deployerAddress = await deployer.getAddress();
     const gatewayContract = await gatewayFactory.deploy(
-      deployer.address, // tangle placeholder
+      deployerAddress, // tangle placeholder
       creditsAddr,
-      deployer.address, // owner
+      deployerAddress, // owner
     );
     await gatewayContract.waitForDeployment();
     gateway = new ethers.Contract(await gatewayContract.getAddress(), GATEWAY_ABI, deployer);

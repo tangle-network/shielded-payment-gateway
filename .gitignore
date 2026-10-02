@@ -21,6 +21,7 @@ dependencies/
 *.toc
 build/circuits/
 build/trusted-setup/
+.e2e-cache/
 .claude/
 package-lock.json
 !/broadcast
@@ -28,3 +29,7 @@ package-lock.json
 /broadcast/*/31337/
 /broadcast/**/dry-run/
 sp1-batch/contracts/lib/
+deploy/output/
+circuits/vanchor
+circuits/merkle-tree
+circuits/set
