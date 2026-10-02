@@ -204,3 +204,12 @@ export SNARKJS_BIN=<path-to-snarkjs-0.7.5> \
 
 Machinery: `scripts/trusted-setup/lib-ceremony.sh` (entropy generation,
 SSH remote contribution, drand beacon, JSONL attestation).
+
+**Fidelity note.** The executed run recorded above used
+`scripts/trusted-setup/lib-ceremony.sh` exactly as committed at
+**e6e2721** (`feat/phase2-ceremony`, released as `circuits-v1.0.0-phase2`,
+which is immutable). The current `main` may evolve the surrounding driver
+scripts (e.g. per-circuit powers-of-tau sizing in `ceremony.sh`); for
+byte-exact reproduction of this run, check out e6e2721 and follow the
+steps above. The trust chain itself is anchored by the attestation log
+and contribution hashes, not by script version.

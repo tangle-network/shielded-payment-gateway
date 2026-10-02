@@ -22,8 +22,7 @@ import {
   computeExtDataHash,
 } from '../src/proof/witness.js'
 
-const ROOT_DIR = join(import.meta.dirname, '../../../')
-const CIRCUIT_DIR = join(ROOT_DIR, 'build/circuits/vanchor_2_8')
+const CIRCUIT_DIR = join(import.meta.dirname, '../../../build/circuits/vanchor_2_8')
 const WASM_PATH = join(
   CIRCUIT_DIR,
   'poseidon_vanchor_2_8_js/poseidon_vanchor_2_8.wasm'

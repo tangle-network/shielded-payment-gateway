@@ -197,4 +197,32 @@ contract BatchVerifierTest is Test {
     function test_missingCommitment_returnsFalse() public view {
         assertFalse(verifier.hasCommitment(bytes32(uint256(0x999))));
     }
+
+    // ─── Gas benchmark: state-processing cost per batch size ────────────
+    // Run: forge test --match-test test_gas -vv
+    // Note: uses MockSP1Verifier, so add the constant SP1 wrapper-proof
+    // verification cost (~270k gas) on top for the on-chain total.
+
+    function _processBatchOfSize(uint32 txCount) internal {
+        uint256 n = uint256(txCount);
+        bytes32[] memory nullifiers = new bytes32[](2 * n);
+        bytes32[] memory commitments = new bytes32[](2 * n);
+        for (uint256 i = 0; i < 2 * n; i++) {
+            nullifiers[i] = keccak256(abi.encodePacked("nf", i));
+            commitments[i] = keccak256(abi.encodePacked("cm", i));
+        }
+        verifier.processBatch(hex"1234", _encodeBatch(txCount, nullifiers, commitments));
+    }
+
+    function test_gas_processBatch_1() public {
+        _processBatchOfSize(1);
+    }
+
+    function test_gas_processBatch_10() public {
+        _processBatchOfSize(10);
+    }
+
+    function test_gas_processBatch_50() public {
+        _processBatchOfSize(50);
+    }
 }

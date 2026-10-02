@@ -62,7 +62,9 @@ make_entropy() {
 
 snarkjs_run() {
     if [ -n "${SNARKJS_BIN:-}" ]; then
-        "$SNARKJS_BIN" "$@"
+        # SNARKJS_BIN may be multi-word (e.g. "npx --yes snarkjs@^0.7").
+        # shellcheck disable=SC2086
+        $SNARKJS_BIN "$@"
     else
         npx snarkjs "$@"
     fi
