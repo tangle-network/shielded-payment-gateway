@@ -56,6 +56,7 @@ interface IShieldedGateway {
     error PoolAlreadyRegistered(address token);
     error InvalidSpendAmount();
     error InvalidRecipient();
+    error InvalidSettlementAddress(address settlement);
 
     // ═══════════════════════════════════════════════════════════════════════
     // POOL MANAGEMENT

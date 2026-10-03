@@ -65,6 +65,7 @@ contract BatchTransactor is ReentrancyGuard {
 
     error EmptyBatch();
     error TxFailed(uint32 txIndex, bytes reason);
+    error RefundFailed();
 
     constructor(address _sp1Verifier, bytes32 _programVKey) {
         sp1Verifier = ISP1Verifier(_sp1Verifier);
@@ -117,6 +118,13 @@ contract BatchTransactor is ReentrancyGuard {
 
         totalProcessed += txs.length;
         emit BatchExecuted(currentBatch, uint32(txs.length));
+
+        // msg.value is never forwarded to the VAnchor (batch txs carry no per-tx
+        // value), so refund it — otherwise any ETH sent is locked in this contract.
+        if (msg.value > 0) {
+            (bool ok,) = msg.sender.call{ value: msg.value }("");
+            if (!ok) revert RefundFailed();
+        }
     }
 
     receive() external payable {}

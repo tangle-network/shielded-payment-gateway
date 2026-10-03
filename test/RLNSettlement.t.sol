@@ -179,12 +179,108 @@ contract RLNSettlementTest is Test {
         uint256 x2 = 3;
         uint256 y2 = addmod(identitySecret, mulmod(7, x2, FIELD_PRIME), FIELD_PRIME);
 
-        // Wrong commitment
+        // Genuine shares, but the recovered secret does not hash to this commitment
         bytes32 wrongCommitment = keccak256(abi.encodePacked(uint256(999)));
 
         vm.prank(slasher);
-        vm.expectRevert(IRLNSettlement.SlashFailed.selector);
+        vm.expectRevert(IRLNSettlement.InvalidSlash.selector);
         settlement.slash(keccak256("nf"), x1, y1, x2, y2, wrongCommitment);
+    }
+
+    /// @notice Regression: previously ANY funded deposit could be slashed with
+    ///         fabricated shares (any x1 != x2 interpolates to some "secret").
+    ///         The recovered secret must now hash to the identity commitment.
+    function test_slash_fabricatedShares_cannotDrainDeposit() public {
+        vm.prank(depositor);
+        settlement.deposit(address(token), 100 ether, identityCommitment);
+
+        // Attacker fabricates arbitrary shares — no knowledge of identitySecret
+        uint256 x1 = 1;
+        uint256 y1 = 100;
+        uint256 x2 = 2;
+        uint256 y2 = 200;
+
+        vm.prank(slasher);
+        vm.expectRevert(IRLNSettlement.InvalidSlash.selector);
+        settlement.slash(keccak256("nf"), x1, y1, x2, y2, identityCommitment);
+
+        // Deposit untouched, no pending slash recorded
+        (, uint256 bal,) = settlement.getDeposit(identityCommitment);
+        assertEq(bal, 100 ether);
+        bytes32 slashId = keccak256(abi.encode(identityCommitment, x1, y1, x2, y2));
+        (, , uint256 amount,) = settlement.pendingSlashes(slashId);
+        assertEq(amount, 0);
+    }
+
+    function test_slash_noDeposit_reverts() public {
+        // Shares and commitment are consistent, but nothing was ever deposited
+        uint256 secret = 777;
+        bytes32 commitment = keccak256(abi.encodePacked(secret));
+        uint256 x1 = 1;
+        uint256 y1 = addmod(secret, mulmod(3, x1, FIELD_PRIME), FIELD_PRIME);
+        uint256 x2 = 2;
+        uint256 y2 = addmod(secret, mulmod(3, x2, FIELD_PRIME), FIELD_PRIME);
+
+        vm.prank(slasher);
+        vm.expectRevert(IRLNSettlement.SlashFailed.selector);
+        settlement.slash(keccak256("nf"), x1, y1, x2, y2, commitment);
+    }
+
+    function test_slash_blocksDoubleSignaledNullifier() public {
+        vm.prank(depositor);
+        settlement.deposit(address(token), 100 ether, identityCommitment);
+
+        uint256 x1 = 1;
+        uint256 y1 = addmod(identitySecret, mulmod(7, x1, FIELD_PRIME), FIELD_PRIME);
+        uint256 x2 = 3;
+        uint256 y2 = addmod(identitySecret, mulmod(7, x2, FIELD_PRIME), FIELD_PRIME);
+
+        bytes32 nullifier = keccak256("double-signal");
+        vm.prank(slasher);
+        settlement.slash(nullifier, x1, y1, x2, y2, identityCommitment);
+
+        assertTrue(settlement.usedNullifiers(nullifier));
+
+        // Operator can no longer claim payment for the fraudulent signal
+        bytes32[] memory nullifiers = new bytes32[](1);
+        nullifiers[0] = nullifier;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 10 ether;
+        vm.prank(operator);
+        vm.expectRevert(abi.encodeWithSelector(IRLNSettlement.NullifierUsed.selector, nullifier));
+        settlement.batchClaim(address(token), nullifiers, amounts, operator);
+    }
+
+    function test_finalizeSlash_emitsEvent() public {
+        vm.prank(depositor);
+        settlement.deposit(address(token), 100 ether, identityCommitment);
+
+        uint256 x1 = 1;
+        uint256 y1 = addmod(identitySecret, mulmod(7, x1, FIELD_PRIME), FIELD_PRIME);
+        uint256 x2 = 3;
+        uint256 y2 = addmod(identitySecret, mulmod(7, x2, FIELD_PRIME), FIELD_PRIME);
+
+        vm.prank(slasher);
+        settlement.slash(keccak256("double-signal"), x1, y1, x2, y2, identityCommitment);
+        bytes32 slashId = keccak256(abi.encode(identityCommitment, x1, y1, x2, y2));
+
+        vm.warp(block.timestamp + settlement.SLASH_DELAY() + 1);
+        vm.expectEmit(true, true, true, true);
+        emit IRLNSettlement.SlashFinalized(slashId, identityCommitment, slasher, 100 ether);
+        settlement.finalizeSlash(slashId);
+    }
+
+    function test_registerRemoveOperator_emitEvents() public {
+        address op = address(0x0B);
+        vm.expectEmit(true, false, false, false);
+        emit IRLNSettlement.OperatorRegistered(op);
+        settlement.registerOperator(op);
+        assertTrue(settlement.authorizedOperators(op));
+
+        vm.expectEmit(true, false, false, false);
+        emit IRLNSettlement.OperatorRemoved(op);
+        settlement.removeOperator(op);
+        assertFalse(settlement.authorizedOperators(op));
     }
 
     // ═══════════════════════════════════════════════════════════════════════
