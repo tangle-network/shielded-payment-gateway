@@ -138,6 +138,13 @@ GATEWAY=0x... CREDITS=0x... POOL=0x... WRAPPER=0x... ./scripts/verify-deployment
 
 See [`deploy/config/`](deploy/config/) for Base Sepolia and Base Mainnet configurations.
 
+## Scaling & multi-asset future
+
+Per-transaction Groth16 proofs (BN254, Poseidon) are the launch stack — cheapest EVM verification and parity with comparable systems. Scaling beyond that is incremental, not a rewrite:
+
+- **Batched settlement** — the `sp1-batch/` SP1 `BatchVerifier` + `BatchTransactor` prove N transactions in one proof (~101k gas/tx at batch 50, measured; see `docs/ZKP-BENCHMARKS.md`). Extending the SP1 program to prove batches of VAnchor transacts is the scaling path.
+- **Multi-asset pools** — the archived [masp-protocol](https://github.com/tangle-network/masp-protocol) repo (dormant since 2024, reference-only) explored multi-asset shielded pools in circom. That direction is superseded: if multi-asset support is ever needed, it lands as a module in the SP1 program above — per masp-protocol's own `ARCHITECTURE.md` — not by reviving the circom MASP. Do not start new work in masp-protocol.
+
 ## Research Spec
 
 Technical spec: [`shielded-payments.pdf`](shielded-payments.pdf)
