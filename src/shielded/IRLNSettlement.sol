@@ -42,24 +42,30 @@ interface IRLNSettlement {
     /// @notice Deposit tokens against an identity commitment.
     /// @param token ERC20 token address
     /// @param amount Amount to deposit
-    /// @param identityCommitment keccak256(identitySecret)
+    /// @param identityCommitment PoseidonT2(identitySecret) — the circuit/SDK identity scheme
     function deposit(address token, uint256 amount, bytes32 identityCommitment) external;
 
     /// @notice Operator batch-claims payments for verified nullifiers.
+    /// @dev Every claim debits the deposit of the identity it was served under:
+    ///      claims against unknown, drained, or wrong-token deposits revert, so
+    ///      total claimed per deposit can never exceed total funded. The payout
+    ///      goes to `msg.sender` (the authorized operator) — never to a
+    ///      caller-supplied address.
     /// @param token ERC20 token address for this batch
     /// @param nullifiers Array of nullifier hashes (verified off-chain by operator)
+    /// @param identityCommitments Deposit identity each nullifier was served under
     /// @param amounts Corresponding payment amounts
-    /// @param operator Address to receive the claimed tokens
     function batchClaim(
         address token,
         bytes32[] calldata nullifiers,
-        uint256[] calldata amounts,
-        address operator
+        bytes32[] calldata identityCommitments,
+        uint256[] calldata amounts
     )
         external;
 
     /// @notice Slash a double-signaler by providing two Shamir shares on the same nullifier.
-    /// @dev Recovers identitySecret = (y2 - y1) / (x2 - x1) mod p, verifies keccak256(secret) == commitment.
+    /// @dev Recovers identitySecret = (y2 - y1) / (x2 - x1) mod p, verifies
+    ///      PoseidonT2(secret) == commitment (matching the RLN circuit and SDK).
     /// @param nullifier The nullifier used twice
     /// @param x1 First share x-coordinate
     /// @param y1 First share y-coordinate
@@ -86,7 +92,7 @@ interface IRLNSettlement {
     /// @param token ERC20 token address
     /// @param rlnAmount Amount for the RLN deposit (D — slashable by math)
     /// @param policyAmount Amount for the policy stake (S — burnable by operator)
-    /// @param identityCommitment keccak256(identitySecret)
+    /// @param identityCommitment PoseidonT2(identitySecret) — the circuit/SDK identity scheme
     function depositWithPolicy(
         address token,
         uint256 rlnAmount,

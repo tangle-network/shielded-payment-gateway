@@ -84,6 +84,16 @@ export function generateCreditKeys(): CreditKeys {
 
 /// Sign a spend authorization (off-chain, cheap).
 /// This is what makes pay-per-job efficient — no ZK proof needed.
+///
+/// ⚠️ WARNING: a SpendAuth PREPAYS the named operator with NO on-chain
+/// guarantee of job completion — `claimPayment` does not verify that any work
+/// was delivered, and there is no dispute path. The named operator can claim
+/// the full authorized amount without serving anything. Exposure per auth is
+/// bounded by `amount` + `expiry`, so keep authorizations SMALL (per-request
+/// amounts) and SHORT (minutes, not days); unclaimed funds are reclaimable
+/// after `expiry`, and `settlePayment` refunds the unused remainder when the
+/// operator settles honestly. Integrators MUST surface this trust delegation
+/// in their UX before requesting a signature.
 export async function signSpendAuthorization(params: {
   spendingPrivateKey: string;
   commitment: string;
@@ -202,7 +212,10 @@ export class ShieldedCreditsClient {
     };
   }
 
-  /// Sign and submit a spend authorization in one call
+  /// Sign and submit a spend authorization in one call.
+  /// ⚠️ See the warning on `signSpendAuthorization`: this prepays the named
+  /// operator with no completion guarantee — keep amounts small and expiries
+  /// short (the default is 1 hour).
   async authorizeSpend(params: {
     spendingPrivateKey: string;
     commitment: string;

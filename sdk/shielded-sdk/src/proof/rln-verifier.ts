@@ -13,6 +13,9 @@ interface ShamirShare {
 /// A verified payment pending on-chain settlement
 interface PendingClaim {
   nullifier: bigint
+  /// Deposit identity the payment was served under — batchClaim debits this
+  /// deposit on-chain (H-1 solvency accounting), so operators must track it.
+  identityCommitment: bigint
   amount: bigint
 }
 
@@ -27,7 +30,7 @@ export interface ShareResult {
 }
 
 const RLN_SETTLEMENT_ABI = [
-  'function batchClaim(address token, bytes32[] nullifiers, uint256[] amounts, address operator)',
+  'function batchClaim(address token, bytes32[] nullifiers, bytes32[] identityCommitments, uint256[] amounts)',
   'function slash(bytes32 nullifier, uint256 x1, uint256 y1, uint256 x2, uint256 y2, bytes32 identityCommitment)',
   'function usedNullifiers(bytes32) view returns (bool)',
 ]
@@ -122,34 +125,42 @@ export class RLNVerifier {
   }
 
   /// Add a verified payment to the pending claims queue.
-  addClaim(nullifier: bigint, amount: bigint): void {
-    this.pendingClaims.push({ nullifier, amount })
+  /// @param identityCommitment Deposit identity the payment was served under
+  ///        (PoseidonT2(identitySecret)) — required by on-chain solvency accounting.
+  addClaim(nullifier: bigint, identityCommitment: bigint, amount: bigint): void {
+    this.pendingClaims.push({ nullifier, identityCommitment, amount })
   }
 
   /// Get all pending claims ready for on-chain settlement.
-  getPendingClaims(): { nullifiers: bigint[]; amounts: bigint[] } {
+  getPendingClaims(): {
+    nullifiers: bigint[]
+    identityCommitments: bigint[]
+    amounts: bigint[]
+  } {
     return {
       nullifiers: this.pendingClaims.map((c) => c.nullifier),
+      identityCommitments: this.pendingClaims.map((c) => c.identityCommitment),
       amounts: this.pendingClaims.map((c) => c.amount),
     }
   }
 
   /// Settle all pending claims in a single on-chain batch transaction.
+  /// The payout goes to the signer's address (the calling operator) — the
+  /// contract no longer accepts a caller-supplied payout address.
   async settleBatch(
     signer: ethers.Signer,
     token: string,
   ): Promise<ethers.TransactionReceipt | null> {
     if (this.pendingClaims.length === 0) return null
 
-    const { nullifiers, amounts } = this.getPendingClaims()
-    const operatorAddress = await signer.getAddress()
+    const { nullifiers, identityCommitments, amounts } = this.getPendingClaims()
 
     const contract = this.settlement.connect(signer) as ethers.Contract
     const tx = await contract.batchClaim(
       token,
       nullifiers.map((n) => ethers.zeroPadValue(ethers.toBeHex(n), 32)),
+      identityCommitments.map((c) => ethers.zeroPadValue(ethers.toBeHex(c), 32)),
       amounts,
-      operatorAddress,
     )
     const receipt = await tx.wait()
 
