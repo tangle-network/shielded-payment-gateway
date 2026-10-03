@@ -16,7 +16,12 @@ interface IRLNSettlement {
     event Deposited(bytes32 indexed identityCommitment, address indexed token, uint256 amount);
     event BatchClaimed(address indexed operator, uint256 count, uint256 totalAmount);
     event Slashed(bytes32 indexed identityCommitment, address indexed slasher, uint256 amount);
+    event SlashFinalized(
+        bytes32 indexed slashId, bytes32 indexed identityCommitment, address indexed slasher, uint256 amount
+    );
     event Withdrawn(bytes32 indexed identityCommitment, address indexed recipient, uint256 amount);
+    event OperatorRegistered(address indexed operator);
+    event OperatorRemoved(address indexed operator);
     event PolicyStakeBurned(
         bytes32 indexed identityCommitment, address indexed operator, uint256 amount, bytes32 reason
     );

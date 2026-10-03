@@ -48,8 +48,8 @@ contract ShieldedGateway is IShieldedGateway, Ownable, ReentrancyGuard {
 
     /// @param _tangle The tnt-core Tangle contract address
     /// @param _credits The ShieldedCredits contract address
-    /// @param _owner The gateway admin (can register pools)
-    constructor(address _tangle, address _credits, address _owner) Ownable(_owner) {
+    /// @param _admin The gateway admin (can register pools)
+    constructor(address _tangle, address _credits, address _admin) Ownable(_admin) {
         tangle = ITangle(_tangle);
         credits = IShieldedCredits(_credits);
     }
@@ -125,6 +125,9 @@ contract ShieldedGateway is IShieldedGateway, Ownable, ReentrancyGuard {
         bytes32 identityCommitment,
         address rlnSettlement
     ) external payable nonReentrant {
+        // Must be a deployed contract: a bare EOA would silently "succeed" the
+        // low-level deposit call below, stranding the withdrawn tokens here.
+        if (rlnSettlement.code.length == 0) revert InvalidSettlementAddress(rlnSettlement);
         (address wrappedToken, uint256 amount) = _executeShieldedWithdrawal(anchorProof);
 
         IERC20(wrappedToken).forceApprove(rlnSettlement, amount);
@@ -208,9 +211,10 @@ contract ShieldedGateway is IShieldedGateway, Ownable, ReentrancyGuard {
 
     /// @notice Rescue ETH accidentally sent to the gateway.
     function rescueETH(address payable recipient) external onlyOwner {
+        if (recipient == address(0)) revert InvalidRecipient();
         uint256 balance = address(this).balance;
         (bool success,) = recipient.call{ value: balance }("");
-        require(success);
+        require(success, "ETH transfer failed");
     }
 
     /// @notice Allows the gateway to receive native tokens (for native VAnchor refunds)
