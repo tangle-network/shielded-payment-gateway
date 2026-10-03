@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import { Test } from "forge-std/Test.sol";
 import { MockERC20 } from "../MockERC20.sol";
+import { MockFeeOnTransferToken } from "../MockFeeOnTransferToken.sol";
 import { ShieldedCredits } from "../../src/shielded/ShieldedCredits.sol";
 import { IShieldedCredits } from "../../src/shielded/IShieldedCredits.sol";
 import { MessageHashUtils } from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
@@ -95,6 +96,26 @@ contract ShieldedCreditsTest is Test {
         vm.prank(funder);
         vm.expectRevert(IShieldedCredits.InvalidCommitment.selector);
         credits.fundCredits(address(token), CREDIT_AMOUNT, bytes32(0), spendingPubKey);
+    }
+
+    function test_fundCredits_feeOnTransfer_creditsReceivedAmount() public {
+        MockFeeOnTransferToken fot = new MockFeeOnTransferToken();
+        fot.setFeeBps(500); // 5% skim
+        fot.mint(funder, CREDIT_AMOUNT);
+        vm.prank(funder);
+        fot.approve(address(credits), CREDIT_AMOUNT);
+
+        bytes32 fotCommitment = keccak256("fot-account");
+
+        vm.prank(funder);
+        credits.fundCredits(address(fot), CREDIT_AMOUNT, fotCommitment, spendingPubKey);
+
+        // Account is credited only what the contract actually received (95%)
+        IShieldedCredits.CreditAccountView memory acct = credits.getAccount(fotCommitment);
+        assertEq(acct.balance, 95 ether);
+        assertEq(acct.totalFunded, 95 ether);
+        // Contract solvency: internal accounting matches token balance exactly
+        assertEq(fot.balanceOf(address(credits)), acct.balance);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

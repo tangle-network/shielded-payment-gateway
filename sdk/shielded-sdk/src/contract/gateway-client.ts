@@ -210,10 +210,14 @@ export class ShieldedGatewayClient {
   /// Build the VAnchorProof struct for a shielded withdrawal to the gateway.
   /// This is the core function — it selects UTXOs, generates the ZK proof,
   /// and encodes everything for the ShieldedGateway contract.
+  /// `relayer` MUST be the address that will submit the transaction:
+  /// the gateway enforces extData.relayer == msg.sender so that mempool
+  /// observers cannot front-run and redirect the withdrawal.
   async buildShieldedWithdrawal(params: {
     keypair: Keypair;
     amount: bigint;
     noteManager: NoteManager;
+    relayer: string;
   }): Promise<{
     anchorProof: {
       proof: Uint8Array;
@@ -225,7 +229,7 @@ export class ShieldedGatewayClient {
     spentNotes: NoteData[];
     changeNote: NoteData | null;
   }> {
-    const { keypair, amount, noteManager } = params;
+    const { keypair, amount, noteManager, relayer } = params;
     const chainId = typedChainId(ChainType.EVM, this.config.chainId);
 
     // Select notes to spend
@@ -262,7 +266,7 @@ export class ShieldedGatewayClient {
     const extDataHash = computeExtDataHash({
       recipient: gateway,
       extAmount: -amount,
-      relayer: ethers.ZeroAddress,
+      relayer,
       fee: 0n,
       refund: 0n,
       token: this.config.wrappedTokenAddress,
@@ -299,7 +303,7 @@ export class ShieldedGatewayClient {
         {
           recipient: gateway,
           extAmount: -amount,
-          relayer: ethers.ZeroAddress,
+          relayer,
           fee: 0,
           refund: 0,
           token: this.config.wrappedTokenAddress,
@@ -378,6 +382,7 @@ export class ShieldedGatewayClient {
       keypair,
       amount,
       noteManager,
+      relayer: await signer.getAddress(),
     });
 
     const gateway = new ethers.Contract(

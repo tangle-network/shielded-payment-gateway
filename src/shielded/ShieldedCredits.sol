@@ -114,13 +114,20 @@ contract ShieldedCredits is IShieldedCredits, ReentrancyGuard {
             }
         }
 
-        // Pull tokens from caller (ShieldedGateway or direct funder)
+        // Pull tokens from caller (ShieldedGateway or direct funder).
+        // Credit the amount actually received, not the requested amount:
+        // fee-on-transfer tokens deliver less than `amount`, and crediting
+        // the nominal value would overstate the account and leave the
+        // contract insolvent for the last withdrawers.
+        uint256 balBefore = IERC20(token).balanceOf(address(this));
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        uint256 received = IERC20(token).balanceOf(address(this)) - balBefore;
+        if (received == 0) revert InsufficientCredits(0, amount);
 
-        acct.balance += amount;
-        acct.totalFunded += amount;
+        acct.balance += received;
+        acct.totalFunded += received;
 
-        emit CreditsFunded(commitment, token, amount, acct.balance);
+        emit CreditsFunded(commitment, token, received, acct.balance);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

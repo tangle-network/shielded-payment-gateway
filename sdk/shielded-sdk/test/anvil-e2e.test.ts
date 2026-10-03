@@ -348,7 +348,9 @@ describe.skipIf(SKIP)("Anvil E2E: Full Shielded Payment Lifecycle", () => {
 
     const externalData = abiCoder.encode(
       ["tuple(address,int256,address,uint256,uint256,address)"],
-      [[gatewayAddr, -withdrawAmount, ethers.ZeroAddress, 0, 0, tokenAddr]]
+      // relayer must be the submitter: ShieldedGateway enforces
+      // extData.relayer == msg.sender to prevent mempool front-running
+      [[gatewayAddr, -withdrawAmount, await deployer.getAddress(), 0, 0, tokenAddr]]
     );
 
     const publicInputsEncoded = abiCoder.encode(
