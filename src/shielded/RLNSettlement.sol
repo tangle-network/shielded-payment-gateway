@@ -54,7 +54,7 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
     mapping(address => bool) public authorizedOperators;
 
     /// @notice Contract owner (registers operators)
-    address public owner;
+    address public immutable owner;
 
     /// @notice Pending slashes (time-locked to prevent self-slashing)
     struct PendingSlash {
@@ -66,15 +66,6 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
 
     mapping(bytes32 => PendingSlash) public pendingSlashes; // slash ID => pending
     uint256 public constant SLASH_DELAY = 1 days;
-
-    /// @notice Stored Shamir shares for slashing detection: nullifier => (x, y)
-    struct ShamirShare {
-        uint256 x;
-        uint256 y;
-        bool exists;
-    }
-
-    mapping(bytes32 => ShamirShare) internal _shares;
 
     // ═══════════════════════════════════════════════════════════════════════
     // CONSTRUCTOR + ADMIN
@@ -91,10 +82,12 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
 
     function registerOperator(address op) external onlyOwner {
         authorizedOperators[op] = true;
+        emit OperatorRegistered(op);
     }
 
     function removeOperator(address op) external onlyOwner {
         authorizedOperators[op] = false;
+        emit OperatorRemoved(op);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -212,7 +205,7 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
     ///      intentionally double-signals to recover their deposit before
     ///      the operator can batch-claim.
     function slash(
-        bytes32, /* nullifier */
+        bytes32 nullifier,
         uint256 x1,
         uint256 y1,
         uint256 x2,
@@ -233,17 +226,20 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
         uint256 slope = mulmod(dy, dxInv, FIELD_PRIME);
         uint256 secret = addmod(y1, FIELD_PRIME - mulmod(x1, slope, FIELD_PRIME), FIELD_PRIME);
 
-        // Verify: the recovered secret's commitment matches.
-        // The circuit uses Poseidon(identitySecret) for the identity commitment.
-        // On-chain we verify using the caller-provided identityCommitment and
-        // the recovered secret. Since we can't compute Poseidon on-chain cheaply,
-        // we store the secret and let the operator/anyone verify during finalization.
-        //
-        // Alternative: use a Poseidon precompile or store commitments with keccak256.
-        // For now: the caller provides both the shares AND the identityCommitment.
-        // The deposit must exist for that commitment (prevents random slashing).
+        // Verify: the recovered secret must hash to the slashed identity commitment.
+        // identityCommitment = keccak256(identitySecret) (see IRLNSettlement).
+        // Without this check, anyone could slash ANY funded deposit with fabricated
+        // shares (any x1 != x2 interpolates to some "secret"). The Shamir math is
+        // only meaningful if the recovered secret is bound to the on-chain identity.
+        if (keccak256(abi.encodePacked(secret)) != identityCommitment) revert InvalidSlash();
+
+        // The deposit must exist for that commitment.
         DepositInfo storage info = deposits[identityCommitment];
         if (info.balance == 0) revert SlashFailed();
+
+        // Block the double-signaled nullifier so the operator cannot also
+        // batch-claim payment for the fraudulent signals.
+        usedNullifiers[nullifier] = true;
 
         // Time-locked: store pending slash
         bytes32 slashId = keccak256(abi.encode(identityCommitment, x1, y1, x2, y2));
@@ -275,6 +271,8 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
 
         DepositInfo storage info = deposits[ic];
         IERC20(info.token).safeTransfer(slasher, amount);
+
+        emit SlashFinalized(slashId, ic, slasher, amount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
