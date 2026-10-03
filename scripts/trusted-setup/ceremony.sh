@@ -2,8 +2,14 @@
 # Groth16 trusted setup ceremony for VAnchor circuits.
 #
 # Compiles the VAnchor circuits from protocol-solidity, downloads the
-# Hermez powers-of-tau file, runs phase 2 contributions, and exports
+# Hermez powers-of-tau file, runs a MULTI-CONTRIBUTOR phase 2 ceremony
+# (real entropy per contribution, optional SSH remote contribution for
+# multi-machine independence, drand public-randomness beacon), and exports
 # verification keys + Solidity verifier contracts.
+#
+# Every step is recorded in build/trusted-setup/ceremony-attestation.jsonl
+# (timestamps, machines, contribution hashes, sha256 of every intermediate).
+# See scripts/trusted-setup/lib-ceremony.sh for the machinery and env knobs.
 #
 # Prerequisites:
 #   - Node.js >= 18 (for snarkjs)
@@ -32,6 +38,13 @@ CIRCUITS_OUT="$BUILD_DIR/circuits"
 ZKEYS_OUT="$BUILD_DIR/zkeys"
 VKEYS_OUT="$BUILD_DIR/verification_keys"
 VERIFIERS_OUT="$BUILD_DIR/verifiers"
+BEACON_PROOFS_OUT="$BUILD_DIR/beacon-proofs"
+
+# Attestation log for the whole ceremony (JSONL, one event per step).
+export CEREMONY_ATTEST_LOG="${CEREMONY_ATTEST_LOG:-$BUILD_DIR/ceremony-attestation.jsonl}"
+
+# shellcheck source=lib-ceremony.sh
+source "$SCRIPT_DIR/lib-ceremony.sh"
 
 # Default powers-of-tau size (2^22 constraints, sufficient for VAnchor circuits)
 PTAU_SIZE="${PTAU_SIZE:-22}"
@@ -113,31 +126,54 @@ check_deps() {
 }
 
 # ============================================================================
-# Step 1: Download powers-of-tau (Hermez ceremony)
+# Step 1: Download powers-of-tau (public perpetual powers-of-tau, ppot_0080)
 # ============================================================================
 
+# Canonical phase-1 file shared by every circuit. PSE's perpetual
+# powers-of-tau ceremony (challenge 0080, 54+ contributors + a Bitcoin
+# beacon), 2^${PTAU_SIZE}.
+ptau_file() {
+    echo "$BUILD_DIR/ppot_0080_${PTAU_SIZE}.ptau"
+}
+
 download_ptau() {
-    local ptau_file="$BUILD_DIR/powersOfTau28_hez_final_${PTAU_SIZE}.ptau"
+    local ptau_file
+    ptau_file=$(ptau_file)
 
     if [ -f "$ptau_file" ]; then
         echo "Powers of tau already downloaded: $ptau_file"
         return
     fi
 
-    echo "Downloading Hermez powers-of-tau (2^${PTAU_SIZE})..."
+    echo "Downloading perpetual powers-of-tau ppot_0080 (2^${PTAU_SIZE})..."
     mkdir -p "$BUILD_DIR"
 
-    local url="https://circom.info/powersOfTau28_hez_final_${PTAU_SIZE}.ptau"
-    if command -v curl &>/dev/null; then
-        curl -L --progress-bar -o "$ptau_file" "$url"
-    elif command -v wget &>/dev/null; then
-        wget -q --show-progress -O "$ptau_file" "$url"
-    else
-        echo "ERROR: curl or wget required to download ptau file."
+    local urls=(
+        "https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_${PTAU_SIZE}.ptau"
+        "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_${PTAU_SIZE}.ptau"
+        "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_${PTAU_SIZE}.ptau"
+    )
+    local ok=false url
+    for url in "${urls[@]}"; do
+        echo "  trying $url"
+        if curl -fsSL --progress-bar -o "$ptau_file" "$url"; then ok=true; break; fi
+        rm -f "$ptau_file"
+    done
+    if [ "$ok" != "true" ]; then
+        echo "ERROR: all powers-of-tau mirrors failed."
+        exit 1
+    fi
+
+    # Sanity: ptau files start with the magic "ptau".
+    if [ "$(head -c 4 "$ptau_file")" != "ptau" ]; then
+        echo "ERROR: downloaded file is not a valid ptau (bad magic):"
+        head -c 200 "$ptau_file"; echo
+        rm -f "$ptau_file"
         exit 1
     fi
 
     echo "Downloaded: $ptau_file"
+    echo "  sha256: $(sha256_file "$ptau_file")"
     echo ""
 }
 
@@ -186,7 +222,8 @@ compile_all_circuits() {
 
 phase2_ceremony() {
     local circuit_name="$1"
-    local ptau_file="$BUILD_DIR/powersOfTau28_hez_final_${PTAU_SIZE}.ptau"
+    local ptau_file
+    ptau_file=$(ptau_file)
     local r1cs="$CIRCUITS_OUT/$circuit_name/${circuit_name}.r1cs"
     local zkey_dir="$ZKEYS_OUT/$circuit_name"
     local final_zkey="$zkey_dir/circuit_final.zkey"
@@ -219,45 +256,26 @@ phase2_ceremony() {
     # Skip the expensive setup/contribute/beacon steps if the final zkey
     # already exists (previous run died during export).
     if [ ! -f "$final_zkey" ]; then
-    # Initial setup
-    echo "    Groth16 setup..."
-    npx snarkjs groth16 setup \
-        "$r1cs" "$ptau_file" \
-        "$zkey_dir/circuit_0000.zkey"
+    # Multi-contributor chain: groth16 setup -> N real-entropy contributions
+    # (one remote over SSH when CEREMONY_REMOTE_TARGET is set) -> drand
+    # public-randomness beacon. sha256 of every intermediate lands in
+    # $CEREMONY_ATTEST_LOG (see lib-ceremony.sh).
+    run_contribution_chain "$circuit_name" "$r1cs" "$ptau_file" "$zkey_dir" "$BEACON_PROOFS_OUT"
 
-    # Contribution (deterministic for dev; use real entropy in production)
-    echo "    Contributing..."
-    echo "tangle-shielded-setup" | npx snarkjs zkey contribute \
-        "$zkey_dir/circuit_0000.zkey" \
-        "$zkey_dir/circuit_0001.zkey" \
-        --name="Tangle contribution" -v
-
-    # Verify contribution
-    echo "    Verifying contribution..."
-    npx snarkjs zkey verify "$r1cs" "$ptau_file" "$zkey_dir/circuit_0001.zkey"
-
-    # Apply random beacon
-    echo "    Applying beacon..."
-    npx snarkjs zkey beacon \
-        "$zkey_dir/circuit_0001.zkey" \
-        "$final_zkey" \
-        0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 10 \
-        -n="Final Beacon phase2"
-
-    # Final verification
+    # Final verification against R1CS + ptau
     echo "    Final verification..."
-    npx snarkjs zkey verify "$r1cs" "$ptau_file" "$final_zkey"
+    snarkjs_run zkey verify "$r1cs" "$ptau_file" "$final_zkey"
     fi
 
     # Export verification key
     mkdir -p "$VKEYS_OUT"
-    npx snarkjs zkey export verificationkey \
+    snarkjs_run zkey export verificationkey \
         "$final_zkey" \
         "$VKEYS_OUT/${circuit_name}_verification_key.json"
 
     # Export Solidity verifier
     mkdir -p "$VERIFIERS_OUT"
-    npx snarkjs zkey export solidityverifier \
+    snarkjs_run zkey export solidityverifier \
         "$final_zkey" \
         "$VERIFIERS_OUT/${circuit_name}_verifier.sol"
 
@@ -270,8 +288,8 @@ phase2_ceremony() {
     "${sed_i[@]}" 's/pragma solidity ^0.6.11;/pragma solidity ^0.8.18;/' \
         "$VERIFIERS_OUT/${circuit_name}_verifier.sol"
 
-    # Clean up intermediate zkeys to save disk space
-    rm -f "$zkey_dir/circuit_0000.zkey" "$zkey_dir/circuit_0001.zkey"
+    # (intermediate zkeys were removed by run_contribution_chain after their
+    # hashes were attested)
 
     echo "    Done: $circuit_name"
 }
