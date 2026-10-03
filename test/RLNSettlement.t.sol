@@ -283,6 +283,22 @@ contract RLNSettlementTest is Test {
         assertFalse(settlement.authorizedOperators(op));
     }
 
+    function test_slash_otherIdentitySecret_reverts() public {
+        // Shares from a DIFFERENT identity (secret 777) cannot slash secret 42's deposit
+        vm.prank(depositor);
+        settlement.deposit(address(token), 100 ether, identityCommitment);
+
+        uint256 otherSecret = 777;
+        uint256 x1 = 1;
+        uint256 y1 = addmod(otherSecret, mulmod(7, x1, FIELD_PRIME), FIELD_PRIME);
+        uint256 x2 = 3;
+        uint256 y2 = addmod(otherSecret, mulmod(7, x2, FIELD_PRIME), FIELD_PRIME);
+
+        vm.prank(slasher);
+        vm.expectRevert(IRLNSettlement.InvalidSlash.selector);
+        settlement.slash(keccak256("nf"), x1, y1, x2, y2, identityCommitment);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // WITHDRAWAL
     // ═══════════════════════════════════════════════════════════════════════

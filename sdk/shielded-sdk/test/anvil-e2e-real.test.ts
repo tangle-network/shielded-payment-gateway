@@ -426,6 +426,8 @@ describe.skipIf(SKIP)("Anvil E2E (REAL VAnchor + REAL on-chain proofs)", () => {
     extAmount: bigint;
     recipient: string;
     fee?: bigint;
+    /// Submitter address — required for proofs relayed through ShieldedGateway
+    relayer?: string;
     /// Override roots[0] (e.g. for the first deposit, where the on-chain
     /// empty-tree root convention is zeros(levels-1), not zeros(levels))
     localRoot?: bigint;
@@ -444,7 +446,9 @@ describe.skipIf(SKIP)("Anvil E2E (REAL VAnchor + REAL on-chain proofs)", () => {
     const extDataHash = computeExtDataHash({
       recipient: params.recipient,
       extAmount: params.extAmount,
-      relayer: ethers.ZeroAddress,
+      // Gateway withdrawals must name the submitter as relayer
+      // (ShieldedGateway enforces extData.relayer == msg.sender).
+      relayer: params.relayer ?? ethers.ZeroAddress,
       fee,
       refund: 0n,
       token: wrapperAddr,
@@ -588,6 +592,7 @@ describe.skipIf(SKIP)("Anvil E2E (REAL VAnchor + REAL on-chain proofs)", () => {
       outputs: [changeUtxo, zeroOut],
       extAmount: -fundAmount,
       recipient: gatewayAddr, // gateway enforces recipient == itself
+      relayer: deployerAddress, // gateway enforces relayer == msg.sender
     });
     console.timeEnd("  withdrawal proof");
 
@@ -597,7 +602,7 @@ describe.skipIf(SKIP)("Anvil E2E (REAL VAnchor + REAL on-chain proofs)", () => {
       auxPublicInputs: "0x",
       externalData: abiCoder.encode(
         ["tuple(address,int256,address,uint256,uint256,address)"],
-        [[gatewayAddr, -fundAmount, ethers.ZeroAddress, 0n, 0n, wrapperAddr]]
+        [[gatewayAddr, -fundAmount, deployerAddress, 0n, 0n, wrapperAddr]]
       ),
       publicInputs: abiCoder.encode(
         ["tuple(bytes,bytes,uint256[],uint256[2],uint256,uint256)"],

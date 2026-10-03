@@ -57,6 +57,7 @@ interface IShieldedGateway {
     error InvalidSpendAmount();
     error InvalidRecipient();
     error InvalidSettlementAddress(address settlement);
+    error InvalidRelayer(address expected, address got);
 
     // ═══════════════════════════════════════════════════════════════════════
     // POOL MANAGEMENT

@@ -34,6 +34,13 @@ import { CommonExtData, PublicInputs, Encryptions } from "protocol-solidity/stru
 ///      - Anonymity set = all depositors in the VAnchor pool for that token
 ///      - Gateway cannot link VAnchor nullifiers to tnt-core service IDs (no mapping stored)
 ///      - permittedCallers should be ephemeral keys to avoid linking on-chain identity
+///      - extData.relayer MUST equal msg.sender: the ZK proof binds extData (via
+///        extDataHash), and relayer is the only proof-bound submitter identity.
+///        This stops mempool front-runners from copying a valid proof and swapping
+///        the unbound destination params (credit commitment/spendingKey, service
+///        params, RLN identity) so the withdrawal funds them. Users should either
+///        self-submit from an ephemeral key or name a relayer they trust with
+///        destination selection.
 contract ShieldedGateway is IShieldedGateway, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -134,12 +141,7 @@ contract ShieldedGateway is IShieldedGateway, Ownable, ReentrancyGuard {
         // Call RLNSettlement.deposit(token, amount, identityCommitment)
         // The gateway is msg.sender, so the deposit is anonymous.
         (bool success,) = rlnSettlement.call(
-            abi.encodeWithSignature(
-                "deposit(address,uint256,bytes32)",
-                wrappedToken,
-                amount,
-                identityCommitment
-            )
+            abi.encodeWithSignature("deposit(address,uint256,bytes32)", wrappedToken, amount, identityCommitment)
         );
         require(success, "RLN deposit failed");
 
@@ -186,6 +188,20 @@ contract ShieldedGateway is IShieldedGateway, Ownable, ReentrancyGuard {
 
         // Recipient must be this contract
         if (extData.recipient != address(this)) revert InvalidRecipient();
+
+        // Relayer binding: the ZK proof commits to extData (via extDataHash),
+        // and extData.relayer is the ONLY proof-bound field that identifies a
+        // submitter. Requiring relayer == msg.sender prevents mempool
+        // front-running: without it, anyone could copy this calldata, keep the
+        // valid proof, and swap the unbound destination params (credits
+        // commitment/spendingKey, service params, RLN identity) so the
+        // withdrawal funds THEM — the victim's nullifiers are burned in the
+        // attacker's tx and the victim's tx reverts.
+        // Consequence: the submitter must be the relayer named in the proof.
+        // Users who self-submit from an ephemeral key are fully protected;
+        // users who name a third-party relayer trust it with destination
+        // selection (standard Webb relayer trust model).
+        if (extData.relayer != msg.sender) revert InvalidRelayer(extData.relayer, msg.sender);
 
         // Resolve the pool
         wrappedToken = extData.token;
