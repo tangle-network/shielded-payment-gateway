@@ -115,12 +115,16 @@ class MockOperator {
   }
 
   /// Add claim to pending batch
-  addClaim(nullifier: bigint, amount: bigint): void {
-    this.verifier.addClaim(nullifier, amount)
+  addClaim(nullifier: bigint, identityCommitment: bigint, amount: bigint): void {
+    this.verifier.addClaim(nullifier, identityCommitment, amount)
   }
 
   /// Get pending claims for settlement
-  getPendingClaims(): { nullifiers: bigint[]; amounts: bigint[] } {
+  getPendingClaims(): {
+    nullifiers: bigint[]
+    identityCommitments: bigint[]
+    amounts: bigint[]
+  } {
     return this.verifier.getPendingClaims()
   }
 }
@@ -196,7 +200,10 @@ describe('RLN Off-Chain Verifier — Operator Flow', () => {
     const manualSecret = recoverSecret(share1.x, share1.y, share2.x, share2.y)
     expect(manualSecret).toBe(keypair.privateKey)
 
-    // Verify identity commitment binding
+    // Verify identity commitment binding. The on-chain slash check is
+    // PoseidonT2(recoveredSecret) == identityCommitment (M-2 unification) —
+    // the SDK's Poseidon identityCommitment is exactly what
+    // RLNSettlement.slash verifies, so circuit-native identities are slashable.
     const identityCommitment = await poseidonHash([keypair.privateKey])
     const recoveredCommitment = await poseidonHash([manualSecret])
     expect(recoveredCommitment).toBe(identityCommitment)
@@ -246,6 +253,7 @@ describe('RLN Off-Chain Verifier — Operator Flow', () => {
   it('batch settlement: accumulate 5 claims and verify structure', async () => {
     const freshOp = new MockOperator()
     const amounts = [100n, 200n, 50n, 75n, 300n]
+    const identityCommitment = await poseidonHash([keypair.privateKey])
 
     for (let i = 0; i < 5; i++) {
       const epoch = BigInt(1000 + i)
@@ -256,7 +264,7 @@ describe('RLN Off-Chain Verifier — Operator Flow', () => {
       // Verify structure
       const valid = await freshOp.verifyProofStructure(
         nullifier, share.x, share.y,
-        await poseidonHash([keypair.privateKey]),
+        identityCommitment,
         epoch, chainId,
       )
       expect(valid).toBe(true)
@@ -265,18 +273,24 @@ describe('RLN Off-Chain Verifier — Operator Flow', () => {
       const result = freshOp.recordShare(nullifier, share.x, share.y)
       expect(result.slashable).toBe(false)
 
-      // Add claim
-      freshOp.addClaim(nullifier, amounts[i])
+      // Add claim (identity commitment required for on-chain solvency debit)
+      freshOp.addClaim(nullifier, identityCommitment, amounts[i])
     }
 
     // Verify batch structure
     const batch = freshOp.getPendingClaims()
     expect(batch.nullifiers.length).toBe(5)
+    expect(batch.identityCommitments.length).toBe(5)
     expect(batch.amounts.length).toBe(5)
 
     // All nullifiers are unique
     const uniqueNullifiers = new Set(batch.nullifiers.map(n => n.toString()))
     expect(uniqueNullifiers.size).toBe(5)
+
+    // Identity commitments match the depositor
+    for (let i = 0; i < 5; i++) {
+      expect(batch.identityCommitments[i]).toBe(identityCommitment)
+    }
 
     // Amounts match
     for (let i = 0; i < 5; i++) {

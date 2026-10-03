@@ -6,6 +6,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import { IRLNSettlement } from "./IRLNSettlement.sol";
+import { PoseidonT2 } from "protocol-solidity/hashers/Poseidon.sol";
 
 /// @title RLNSettlement
 /// @author Tangle Network
@@ -13,12 +14,21 @@ import { IRLNSettlement } from "./IRLNSettlement.sol";
 ///
 /// @dev Trust model: operators verify ZK proofs off-chain (backed by tnt-core staking/slashing).
 ///      This contract only enforces:
-///        1. Deposit accounting per identity commitment
+///        1. Deposit accounting per identity commitment — batchClaim debits the named
+///           deposit per claim; claimed can never exceed funded (no insolvency via claims)
 ///        2. Global nullifier uniqueness (prevents double-spend on-chain)
-///        3. Shamir-based slashing for double-signalers
-///        4. Batch claim by operators
+///        3. Shamir-based slashing for double-signalers, bound to the circuit-native
+///           identity commitment (PoseidonT2(identitySecret), same as the RLN circuit/SDK)
+///        4. Batch claim by operators — payout goes to the calling operator, never to a
+///           caller-supplied address
 ///
-/// @dev AUDIT SURFACE: ~180 lines. No on-chain ZK verification — minimal attack surface.
+/// @dev LINKING: this contract calls the external PoseidonT2 library. Deploy with
+///      --libraries "protocol-solidity/hashers/Poseidon.sol:PoseidonT2:<addr>" pointing at
+///      the circomlibjs-generated PoseidonT2 already deployed for the VAnchor stack
+///      (see scripts/deploy-full-stack.sh / docs/DEPLOYMENTS.md). Forge tests auto-link and
+///      etch the real library bytecode (see test/RLNSettlement.t.sol).
+///
+/// @dev AUDIT SURFACE: ~190 lines. No on-chain ZK verification — minimal attack surface.
 contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
@@ -166,8 +176,8 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
     function batchClaim(
         address token,
         bytes32[] calldata nullifiers,
-        uint256[] calldata amounts,
-        address operator
+        bytes32[] calldata identityCommitments,
+        uint256[] calldata amounts
     )
         external
         nonReentrant
@@ -176,7 +186,7 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
         require(authorizedOperators[msg.sender], "not authorized operator");
 
         uint256 len = nullifiers.length;
-        require(len == amounts.length, "length mismatch");
+        require(len == amounts.length && len == identityCommitments.length, "length mismatch");
         require(len > 0, "empty batch");
 
         uint256 totalAmount;
@@ -185,14 +195,29 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
             bytes32 nf = nullifiers[i];
             if (usedNullifiers[nf]) revert NullifierUsed(nf);
             usedNullifiers[nf] = true;
-            totalAmount += amounts[i];
+
+            // Solvency: every claim debits the deposit of the identity it was
+            // served under. Claims against unknown, drained, or wrong-token
+            // deposits revert, so operators can never pay out more than users
+            // funded and a user cannot withdraw funds an operator already claimed.
+            DepositInfo storage info = deposits[identityCommitments[i]];
+            uint256 amount = amounts[i];
+            if (info.token != token) revert InsufficientDeposit(0, amount);
+            if (amount > info.balance) revert InsufficientDeposit(info.balance, amount);
+            info.balance -= amount;
+
+            totalAmount += amount;
         }
 
+        // Payout goes to the calling operator. There is no per-claim operator
+        // storage to bind against (claims arrive as bare nullifiers — the
+        // operator/context mapping lives off-chain), so msg.sender — the
+        // authenticated, authorized operator — is the only sound payee.
         if (totalAmount > 0) {
-            IERC20(token).safeTransfer(operator, totalAmount);
+            IERC20(token).safeTransfer(msg.sender, totalAmount);
         }
 
-        emit BatchClaimed(operator, len, totalAmount);
+        emit BatchClaimed(msg.sender, len, totalAmount);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -227,11 +252,15 @@ contract RLNSettlement is IRLNSettlement, ReentrancyGuard {
         uint256 secret = addmod(y1, FIELD_PRIME - mulmod(x1, slope, FIELD_PRIME), FIELD_PRIME);
 
         // Verify: the recovered secret must hash to the slashed identity commitment.
-        // identityCommitment = keccak256(identitySecret) (see IRLNSettlement).
-        // Without this check, anyone could slash ANY funded deposit with fabricated
-        // shares (any x1 != x2 interpolates to some "secret"). The Shamir math is
-        // only meaningful if the recovered secret is bound to the on-chain identity.
-        if (keccak256(abi.encodePacked(secret)) != identityCommitment) revert InvalidSlash();
+        // identityCommitment = PoseidonT2(identitySecret) (see IRLNSettlement) — the same
+        // scheme as the RLN circuit and the SDK, so circuit-native identities are
+        // actually slashable. Without this check, anyone could slash ANY funded deposit
+        // with fabricated shares (any x1 != x2 interpolates to some "secret"). The
+        // Shamir math is only meaningful if the recovered secret is bound to the
+        // on-chain identity.
+        uint256[1] memory poseidonInput;
+        poseidonInput[0] = secret;
+        if (bytes32(PoseidonT2.poseidon(poseidonInput)) != identityCommitment) revert InvalidSlash();
 
         // The deposit must exist for that commitment.
         DepositInfo storage info = deposits[identityCommitment];

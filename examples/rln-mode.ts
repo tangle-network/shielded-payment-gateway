@@ -125,13 +125,16 @@ async function main() {
   console.log('Next request will use epoch', nextEpoch.toString())
 
   // --- Step 7: Batch settlement ---
-  // Operator accumulates claims and settles periodically on-chain.
-  verifier.addClaim(request.nullifier, maxCost)
+  // Operator accumulates claims and settles periodically on-chain. Each claim
+  // names the deposit identity it was served under — batchClaim debits that
+  // deposit on-chain and pays out to the calling operator.
+  verifier.addClaim(request.nullifier, identityCommitment, maxCost)
   const pending = verifier.getPendingClaims()
   console.log(`Pending claims: ${pending.nullifiers.length}`)
 
   // In production: operator calls verifier.settleBatch(signer, tokenAddress)
-  // This submits all accumulated nullifiers + amounts in one transaction.
+  // This submits all accumulated nullifiers + identityCommitments + amounts in
+  // one transaction; the payout lands at the operator's signer address.
 }
 
 main().catch(console.error)

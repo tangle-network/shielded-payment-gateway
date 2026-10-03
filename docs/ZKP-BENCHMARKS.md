@@ -19,8 +19,9 @@ for transaction totals. Re-run the scripts below for your own hardware.
   Perpetual Powers of Tau (ppot_0080, the PSE/Semaphore community ceremony)**
   plus a local phase-2 contribution, in minutes on a laptop. No phase-1
   ceremony of our own, ever. See [Trusted setup](#trusted-setup--public-ceremony-parameters).
-- Batched settlement amortizes well: RLN `batchClaim` costs ~25k gas/claim at
-  batch size 50 vs ~97k for a single claim (~3.8x). The SP1 `BatchVerifier`
+- Batched settlement amortizes well: RLN `batchClaim` costs ~27k gas/claim at
+  batch size 50 vs ~107k for a single claim (~4.0x, measured post-H-1 solvency
+  accounting). The SP1 `BatchVerifier`
   replaces N on-chain Groth16 verifications with one SP1 wrapper proof
   plus ~101k gas/tx of state processing (measured).
 - Recommendation: **stay on Groth16/BN254 for the on-chain circuits** (cheapest
@@ -95,13 +96,14 @@ From `forge test --gas-report` (this repo) and the bench script:
 ### RLN settlement batching (`RLNSettlement.batchClaim`)
 
 From `forge test --match-contract RLNSettlementGas -vv`
-(`test/RLNSettlementGas.t.sol`):
+(`test/RLNSettlementGas.t.sol`), measured after the H-1 solvency accounting
+(per-claim deposit debit + token check):
 
 | Batch size | Total gas | Per-claim gas |
 |---|---|---|
-| 1 | 96,924 | 96,924 |
-| 10 | 313,138 | 31,314 |
-| 50 | 1,273,454 | 25,469 |
+| 1 | 107,376 | 107,376 |
+| 10 | 335,417 | 33,542 |
+| 50 | 1,348,370 | 26,967 |
 
 Marginal cost ≈ 24k/claim (fresh nullifier SSTORE + transfer bookkeeping);
 fixed overhead ≈ 73k. At batch 50 this is a **~3.8x saving** vs claiming

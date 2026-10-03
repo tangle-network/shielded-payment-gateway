@@ -61,10 +61,35 @@ EIP-712 signature over a named operator is the trust attestation.
 
 Mitigations available to users:
 
-- Payments not claimed before `expiry` are refundable to the user.
+- Each SpendAuth is bounded: only the named operator can claim, only up to the
+  authorized `amount`, only before `expiry` — blast radius per incident is one
+  authorization.
+- Payments not claimed before `expiry` are refundable to the user
+  (`reclaimExpiredAuth`).
 - `settlePayment` / `releasePayment` allow partial settlement and refund of
   unclaimed amounts.
 
 **Integrators must surface this in their UX**: users authorizing a spend are
 trusting the named operator to deliver, and the UI should make operator
-identity and reputation legible before a signature is requested.
+identity and reputation legible before a signature is requested. Clients
+should default to small per-request amounts and short expiries (minutes, not
+days).
+
+### Decision record (2026-10-03): accepted risk for launch
+
+Reviewed as audit finding M-1 and **accepted for launch** without a contract
+change. Rationale: the hole is real but strictly bounded — the SpendAuth binds
+operator, amount, serviceId, jobIndex, nonce, and expiry under the user's
+EIP-712 signature, so a malicious or lazy operator can take at most one
+authorization's amount; there is no protocol-draining path. The mitigations
+above (per-auth amount bounds, operator binding, expiry reclaim,
+`settlePayment` refunds) are considered sufficient for launch provided
+integrators warn in UX and keep authorizations small and short-lived.
+
+**Planned v2 mitigation:** a spendingKey-signed `revokeSpendAuth(authHash,
+signature)` — the same key that authorized can, before claim and before
+expiry, mark the spend claimed and refund the account (reusing
+`_refundPending`), restoring user recourse for non-delivery. Known trade-off
+to spec at implementation time: a revoking user could also claw back *after*
+being served if the operator delays claiming, so operators must claim
+promptly.
