@@ -1,32 +1,30 @@
 {
   "$schema": "../deploy-config-schema.json",
-  "comment": "Shielded pool deployment config for Base Sepolia testnet",
+  "comment": "Shielded pool deployment config for Base Sepolia testnet — populated 2026-10-02 for the circuits-v1.0.0-phase2 launch rehearsal. Values derived from deploy/config/base-sepolia-shielded.json (feeBps 0, treeLevels 30, maxEdges 7, Circle USDC) with addresses deployed by scripts/deploy-full-stack.sh.",
 
-  "tangle": "0x0000000000000000000000000000000000000000",
+  "tangle": "0x8299d60f373f3a4a8c4878e335cb9d840e6e3730",
 
-  "gatewayOwner": "0x0000000000000000000000000000000000000000",
-  "feeRecipient": "0x0000000000000000000000000000000000000000",
+  "gatewayOwner": "0x2420FFf17c4213A4075cf5f7B6dc33429Aaf22Bb",
+  "feeRecipient": "0x2420FFf17c4213A4075cf5f7B6dc33429Aaf22Bb",
 
   "poseidon": {
-    "comment": "Deploy Poseidon T2-T6 libraries using circomlibjs, then paste addresses here",
-    "T2": "0x0000000000000000000000000000000000000000",
-    "T3": "0x0000000000000000000000000000000000000000",
-    "T4": "0x0000000000000000000000000000000000000000",
-    "T5": "0x0000000000000000000000000000000000000000",
-    "T6": "0x0000000000000000000000000000000000000000"
+    "T2": "0x7A3FBB3cE6BDeE6375741Ab4404Ba34c1670069F",
+    "T3": "0xa680Bf4dF59bC14F7750586DCc7587B4330e9408",
+    "T4": "0x68952c9E6E969179b179bc0C78dd4E614d82f0b5",
+    "T5": "0x9a76841d690Da3fC288471852dDaa97031D5c366",
+    "T6": "0xc39a7eF7Aa8e390e064Bcf04BDdE12cC4754fa2C"
   },
 
   "verifiers": {
-    "comment": "Deploy verifier contracts from trusted setup ceremony output, then paste addresses here",
-    "v2_2": "0x0000000000000000000000000000000000000000",
-    "v2_16": "0x0000000000000000000000000000000000000000",
-    "v8_2": "0x0000000000000000000000000000000000000000",
-    "v8_16": "0x0000000000000000000000000000000000000000"
+    "v2_2": "0x404a2Ca3207147Ad6E6bDE37e42ec5B0f2993B94",
+    "v2_16": "0x272Eba98903c1052da83eFbF1A1a7c72D6e4EBCA",
+    "v8_2": "0x8e793824c7Cf43F0b915f8242E684dDce593f1b1",
+    "v8_16": "0xe0E0975c9F8b9f8a7b131a3370aA19f0Bdb3546B"
   },
 
   "merkleTreeLevels": 30,
-  "maxEdges": 1,
-  "wrappingLimit": 1000000000000,
+  "maxEdges": 7,
+  "wrappingLimit": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
   "feePercentage": 0,
   "isNativeAllowed": false,
 
@@ -38,6 +36,6 @@
   ],
 
   "stablecoinLabels": {
-    "0x036CbD53842c5426634e7929541eC2318f3dCF7e": "USDC (Base Sepolia)"
+    "0x036CbD53842c5426634e7929541eC2318f3dCF7e": "USDC (Base Sepolia, Circle native)"
   }
 }

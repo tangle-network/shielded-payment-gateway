@@ -166,7 +166,13 @@ export TANGLE="$TANGLE"
 export MAX_EDGES=7
 
 CONFIG_FILE="$ROOT_DIR/deploy/config/${CHAIN_NAME}-shielded.json"
-if [ -f "$CONFIG_FILE" ]; then
+if [ -n "${SHIELDED_CONFIG:-}" ]; then
+    # Caller-supplied config wins. The DeployShieldedPool Forge script reads a
+    # flat schema (script/deploy-config/*.json); deploy/config/*.json uses the
+    # richer launch schema — passing it directly reverts on missing keys.
+    export SHIELDED_CONFIG
+    echo "  Using config (override): $SHIELDED_CONFIG"
+elif [ -f "$CONFIG_FILE" ]; then
     export SHIELDED_CONFIG="$CONFIG_FILE"
     echo "  Using config: $CONFIG_FILE"
 fi

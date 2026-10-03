@@ -84,10 +84,10 @@ contract DeployShieldedPool is Script {
             ? json.readAddress(".tangle")
             : vm.envAddress("TANGLE");
         address gatewayOwner = hasConfig
-            ? _jsonAddressOr(json, ".gatewayOwner", deployer)
+            ? json.readAddressOr(".gatewayOwner", deployer)
             : vm.envOr("GATEWAY_OWNER", deployer);
         address feeRecipient = hasConfig
-            ? _jsonAddressOr(json, ".feeRecipient", deployer)
+            ? json.readAddressOr(".feeRecipient", deployer)
             : vm.envOr("FEE_RECIPIENT", deployer);
 
         // --- Pre-deployed Poseidon library addresses (from circomlibjs) ---
@@ -142,10 +142,10 @@ contract DeployShieldedPool is Script {
         // Without initialize(), maximumDepositAmount defaults to 0 and every
         // deposit reverts with "amount is larger than maximumDepositAmount".
         uint256 minimumWithdrawalAmount = hasConfig
-            ? _jsonUintOr(json, ".minimumWithdrawalAmount", 0)
+            ? json.readUintOr(".minimumWithdrawalAmount", 0)
             : vm.envOr("MIN_WITHDRAWAL_AMOUNT", uint256(0));
         uint256 maximumDepositAmount = hasConfig
-            ? _jsonUintOr(json, ".maximumDepositAmount", type(uint256).max)
+            ? json.readUintOr(".maximumDepositAmount", type(uint256).max)
             : vm.envOr("MAX_DEPOSIT_AMOUNT", type(uint256).max);
 
         // --- Stablecoins to register ---
@@ -343,33 +343,5 @@ contract DeployShieldedPool is Script {
         }
 
         return result;
-    }
-
-    /// @notice Read a uint from JSON, falling back to a default.
-    function _jsonUintOr(string memory json, string memory key, uint256 fallback_) internal view returns (uint256) {
-        try this._tryReadUint(json, key) returns (uint256 val) {
-            return val;
-        } catch {
-            return fallback_;
-        }
-    }
-
-    /// @notice External wrapper for json.readUint to use in try/catch.
-    function _tryReadUint(string calldata json, string calldata key) external view returns (uint256) {
-        return json.readUint(key);
-    }
-
-    /// @notice Read an address from JSON, falling back to a default.
-    function _jsonAddressOr(string memory json, string memory key, address fallback_) internal view returns (address) {
-        try this._tryReadAddress(json, key) returns (address val) {
-            return val;
-        } catch {
-            return fallback_;
-        }
-    }
-
-    /// @notice External wrapper for json.readAddress to use in try/catch.
-    function _tryReadAddress(string calldata json, string calldata key) external view returns (address) {
-        return json.readAddress(key);
     }
 }

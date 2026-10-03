@@ -19,10 +19,13 @@ export function encodeRoots(
   return roots;
 }
 
-/// ABI-encode roots as bytes (uint256[] packed) for the Solidity PublicInputs.roots field.
+/// ABI-encode roots as bytes for the Solidity PublicInputs.roots field.
+/// VAnchorEncodeInputs decodes this as a FIXED array (`uint256[maxEdges+1]`),
+/// so the encoding must be a fixed-size array — a dynamic `uint256[]` puts a
+/// 0x20 offset word in slot 0 and reverts with "Cannot find your merkle root".
 export function encodeRootsBytes(roots: bigint[]): Uint8Array {
   const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
-    ["uint256[]"],
+    [`uint256[${roots.length}]`],
     [roots]
   );
   return ethers.getBytes(encoded);
