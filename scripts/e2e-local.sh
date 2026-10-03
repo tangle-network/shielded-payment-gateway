@@ -10,8 +10,9 @@
 #   1. Ensure protocol-solidity submodule + circomlib are present
 #   2. Run the Groth16 trusted setup (skipped if zkeys already exist)
 #      - compiles the 4 VAnchor circuits from protocol-solidity
-#      - downloads the public Hermez powers-of-tau (circom.info mirror)
-#      - phase-2 contribute + beacon (DETERMINISTIC, dev-only entropy)
+#      - downloads the public perpetual powers-of-tau (ppot_0080, PSE mirror)
+#      - multi-contributor phase-2 (real entropy, optional SSH remote
+#        contribution, drand public-randomness beacon)
 #   3. Stage artifacts into build/circuits/ (layout the SDK tests expect)
 #   4. forge build + forge test
 #   5. SDK vitest suite, including REAL proof generation and the REAL
