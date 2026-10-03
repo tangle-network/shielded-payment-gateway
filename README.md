@@ -92,6 +92,18 @@ forge build
 forge test
 ```
 
+All Solidity dependencies are soldeer-managed; nothing is written into the
+`dependencies/` packages by hand, so `forge soldeer install`/`update` can be
+re-run at any time. Two OpenZeppelin majors coexist:
+
+- Gateway contracts and tests (`src/`, `test/`, `script/`) compile against **OZ 5.1.0**.
+- The vendored `protocol-solidity` submodule (audited against OZ 4.x) compiles against
+  **OZ 4.9.6** via a context remapping in `remappings.txt`
+  (`dependencies/protocol-solidity/:@openzeppelin/contracts/=...`). Its imports of paths
+  that OZ 5.x moved or removed (`security/ReentrancyGuard.sol`,
+  `token/ERC20/presets/ERC20PresetMinterPauser.sol`, `security/Pausable.sol`) resolve
+  unmodified.
+
 ### Local end-to-end (real ZK proofs on Anvil)
 
 One command reproduces the full loop — trusted setup, artifact staging,
