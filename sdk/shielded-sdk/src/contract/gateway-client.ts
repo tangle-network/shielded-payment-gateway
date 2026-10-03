@@ -44,7 +44,7 @@ const GATEWAY_ABI = [
 ];
 
 const VANCHOR_ABI = [
-  "function transact(bytes, bytes, tuple(address,int256,address,uint256,uint256,address), tuple(bytes,bytes,uint256[],uint256[2],uint256,uint256), tuple(bytes,bytes)) external payable",
+  "function transact(bytes, bytes, tuple(address recipient, int256 extAmount, address relayer, uint256 fee, uint256 refund, address token), tuple(bytes roots, bytes extensionRoots, uint256[] inputNullifiers, uint256[2] outputCommitments, uint256 publicAmount, uint256 extDataHash), tuple(bytes encryptedOutput1, bytes encryptedOutput2)) external payable",
   "function getLastRoot() external view returns (uint256)",
   "function getLatestNeighborEdges() external view returns (tuple(uint256 chainID, uint256 root, uint256 latestLeafIndex, bytes32 srcResourceID)[])",
   "function getNextIndex() external view returns (uint32)",
