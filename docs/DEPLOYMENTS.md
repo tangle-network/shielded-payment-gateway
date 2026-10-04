@@ -114,3 +114,103 @@ Final protocol decisions for the shielded-payments launch, implemented on `feat/
 - **feeBps = 0 for launch.** The wrapper fee stays at zero in both configs (`deploy/config/base-sepolia-shielded.json`, `deploy/config/base-mainnet-shielded.json`). Rationale: at launch the priority is growing the anonymity set and adoption; any fee skims every deposit/withdrawal, discourages exactly the pool usage that provides privacy for everyone, and the fee can be enabled later by governance once the anonymity set is healthy.
 
 - **Mainnet prerequisite.** Base mainnet deployment is config-ready (`deploy/config/base-mainnet-shielded.json`: Circle USDC/USDT/DAI, `feeBps: 0`, treeLevels 30, maxEdges 7) but blocked on operations, not code: it needs a **funded mainnet deployer key** (ETH on Base for the Poseidon libs, verifiers, pool stack, and setup calls). Deploy with the phase-2 ceremony artifacts from release `circuits-v1.0.0-phase2` and link PoseidonT2-T6 (+ PoseidonT2 into `RLNSettlement`) per `scripts/deploy-full-stack.sh`.
+
+---
+
+## Tempo Moderato testnet (chain 42431) — circuits-v1.0.0-phase2 rehearsal
+
+**Date:** 2026-10-04 (UTC) · **Deployer:** `0x2420FFf17c4213A4075cf5f7B6dc33429Aaf22Bb` (shared testnet deployer)
+**RPC:** `https://rpc.moderato.tempo.xyz` · **Gas:** pathUSD (TIP-20 fee token; plain type-2 EIP-1559 txs are accepted — no `--tempo.fee-token` needed)
+**Circuit artifacts:** GitHub Release `circuits-v1.0.0-phase2` (production ceremony keys; all 16 used files sha256-verified against `SHA256SUMS.txt` before staging). No dev-generated verifiers were used.
+**Stack source:** `main` @ `eb59dc8` (includes the four Base Sepolia deploy-blocker fixes).
+**Verification:** `scripts/verify-deployment.sh` → **13/15 pass**; the 2 failures are the LayerZero bridge checks run against `BRIDGE=0x0` (single-chain deployment, no bridge — same scope as Base Sepolia). All 8 core checks pass (output below).
+**Wrapped stablecoin:** **pathUSD** `0x20C0000000000000000000000000000000000000` — Tempo's canonical TIP-20 stablecoin. No Circle USDC exists on Tempo testnet; no mock token was deployed.
+
+### Deployed contracts
+
+| Contract | Address | Deploy tx |
+|---|---|---|
+| PoseidonT2 | `0xf76C5c7e7D5F149c8c45F33cD6A0eAadC2D36F5C` | via `scripts/deploy-poseidon.mjs` (circomlibjs 0.0.8 bytecode) |
+| PoseidonT3 | `0xeFAaafFE41B331e821de245Fde1a8bF569B1F540` | same |
+| PoseidonT4 | `0x9A694787B4D658C1D6D3D8F6641b79f4AD89c513` | same |
+| PoseidonT5 | `0xCDA24692aEa408fA7057e355dd59e4AbBbF36D70` | same |
+| PoseidonT6 | `0x7c9735488189B247E7d4c054bCF82D00C6aA8cFc` | same |
+| VAnchorEncodeInputs (lib) | `0x2D5267f92134E226cEE89De17616687B058F1038` | forge create (step 1b) |
+| Verifier2_2 (phase-2) | `0x3dbC32DB25eC08a7a8cAe8306985EcE1abF0D571` | forge create from release verifier |
+| Verifier2_16 (phase-2) | `0x8dDb924923cb41475dce0303c21dfDA0bE28D5BB` | same |
+| Verifier8_2 (phase-2) | `0x1D30e3BbC68d3b23e383743262423172244Cf689` | same |
+| Verifier8_16 (phase-2) | `0x22E1f082b46C56C0EaA1A3814ca1c5914A83a597` | same |
+| PoseidonHasher | `0xd1710866e17b78149e20f946e9fee94ce3a02de0` | `0xb3059596f5ec38e9fd781bc7918d7ca43e7916a21b5264be7a18b956777efc55` |
+| VAnchorVerifier | `0x4fc6d640e030e7d4dcf760abcec63f6dbc45edcb` | `0x3102b475d60e07190ac792826fa3b46f8a5c46857218eb393b46d75f338df4c1` |
+| TokenWrapperHandler | `0x7d10438593efa0e5520ae2dbd66f0a95f2ec7271` | `0x34357660ed04ea29888f30485b5686f9af0d6285170762567e07f67b6e4e0f2b` |
+| FungibleTokenWrapper (tsUSD) | `0x99ffbbafd64f05230ed944adfe0dbfc6e92a80d6` | `0xc2ab9f36a4c30ae348b0e75c46bb0476c8f2b9aaa31a97134f829e52a79ce858` |
+| AnchorHandler | `0x13295b2bb61fbfe95a7797ae5982deed4e44b91a` | `0x8e165ab5343c1a6cbcd3ef7f92b0b166d4345402c74db8f0be061b389289674d` |
+| VAnchorTree (pool, 30 levels, maxEdges 7) | `0x32e493b7e8d1167a85f4c49c36369eb1598dbe4d` | `0x3c70870ce6d52bbb4cb3bb6c5df2a02829a7265070fe8d3d08f6eda367419501` |
+| ShieldedCredits | `0x2fe0da22341be04fe24948e6960990f68e494b71` | `0x5d14c8f063daa862061dddf7dcabcae09b13d3d72679a13d4f239b3a5b588820` |
+| **ShieldedGateway (canonical)** | `0x7e7f77ef8b3855c1d29e31afaf4b741aef3e38e0` | `0x02a7bc1acb5bcbe33008418c3f4d0e68a2466451cf465ddbc8abace7b5d34d91` |
+
+Setup calls: wrapper `initialize` `0x899712508baac83bbfd71baea6ed42d6f30dd1a52c55fc95ebaf1eddac667264`, wrapper resource registration `0x958fda8c8db1d94cc8107407457ab485676379541ebabd36757f93518c62a21c`, pathUSD registration `0x5ea693bd191e660ba7f3e89dec4b46e4f6b1d6443910d9f3bfb25857db9e72cd`, pool `initialize` (minWithdraw 0, maxDeposit 2^256−1) `0x37a12a5c5d0d3f999e529ca87b3f6474443855e4ec5040633aeb3761328a8041`, anchor resource registration `0x74aa45576d99d92d1a6e50493428bdf8afc0b72e25edb5cd71d6a9c6c56bbd7e`, pool registration (canonical gateway) `0xe9c225802ae522b4533f2095b09f0ed831a25af23fac3bf9cd3116b0d0487fa3`.
+
+**TANGLE parameter:** the canonical tnt-core proxy on Tempo, `0xff137b9c879c47c28ce389e84501925438ab4cda` (per `tnt-core/deployments/tempo/latest.json`). **feeBps = 0** per rehearsal plan.
+
+### verify-deployment.sh output
+
+```
+ShieldedGateway:
+  ✓ tangle() returns non-zero
+  ✓ credits() returns Credits address
+  ✓ getPool(wrapper) returns Pool address
+ShieldedCredits:
+  ✓ DOMAIN_SEPARATOR is non-zero
+  ✓ SPEND_TYPEHASH is non-zero
+VAnchorTree:
+  ✓ token() returns Wrapper address
+  ✓ maxEdges() returns 7
+  ✓ getLastRoot() returns non-zero
+(LayerZero bridge checks not applicable — BRIDGE=0x0, single-chain deployment)
+```
+
+### Paid flow (operator settlement rail)
+
+Two rehearsal credit accounts were funded directly via `fundCredits` in pathUSD (0.1 pathUSD each;
+the ZK wrap/deposit path was not exercised on Tempo — it is chain-agnostic and was proven on
+Base Sepolia with the same phase-2 zkeys). Operators are the beelink Phase 0 rehearsal operators
+(ops note: `tangle-devops servers/beelink-operators.md`), serving through Cloudflare quick tunnels.
+
+LLM operator `0x4Bc8a99afbE96A784F4f6968854E63C9596F18f2` (llm-inference-blueprint `operator-lite`, main + PR #20, Ollama `qwen2:0.5b`, registered on Tempo tnt-core blueprint 10):
+
+| Step | Tx | Notes |
+|---|---|---|
+| credit account funded (100,000 base units pathUSD) | `0xdd2af06a64313c9fc1be3a9a279099f7b87ecf9c44fbafe8cee9c0e76a2ed4a8` | direct `fundCredits` |
+| SpendAuth (nonce 0, 1000) → operator `authorizeSpend` | `0xa98a649174bc15ff046feb8f91081a0410a08c08075d5e69dea3e0cf3eeafee0` | via public quick-tunnel URL |
+| real inference (17 tokens) → **`settlePayment(authHash, operator, 345)`** | `0x47287c75d1946e9f2b61b41e995fea8eb3554d731051a626f46af1ef29294521` | metered cost 345 (15×15 in + 2×60 out); **655 refunded to the credit account** — PR #20 metered path live on Tempo |
+| second request (nonce 1), another metered 345 | (same operator, account ends 99,310 / totalSpent 690 / nonce 2) | |
+
+Embedding operator `0x8b7aBE33279894E7debCCB0a49E182588FEf0c48` (embedding-inference-blueprint, TEI `BAAI/bge-large-en-v1.5` on CPU, blueprint 11):
+
+| Step | Tx | Notes |
+|---|---|---|
+| credit account funded (100,000 pathUSD) | `0x18dad2f2aa9d365262f5ade6d32f25aad93f4ae77680de7371efd2791f52ee4a` | |
+| SpendAuth (nonce 0) → `authorizeSpend` | `0xf47ca3dbd26199524038a973715ebdd607d9615fe7e45ac802b8520227e7dcdd` | |
+| paid embedding (1024-dim) → `claimPayment` | `0xb7c7d98e372c24fa8bd8fb416f3fa8f63f9f04541c3c96a912a731326f677a9a` | **full pre-auth settled** — embedding blueprint still pins tangle-inference-core `c7e1106`; bump to `8dd186b`+ for metered settle |
+| second request (nonce 1) | auth `0x19caaafcd78a35955d20d245b04d476e43da8073f088c907f634cf01b25efccd`, claim `0x74b147114e28b68226f07bf4cda4ed96c0ce9c921fcc06ef0ffe43c576467b6c` | |
+
+### Tempo-specific deployment notes (read before redeploying)
+
+1. **30M transaction gas cap.** Tempo rejects any tx with a gas limit above 30M. forge's padded
+   (130%) estimate for the VAnchorTree create is ~39M and is rejected by the mempool, even though
+   actual deploy gas is ~5.1M. Deploy with `--gas-estimate-multiplier 100` (raw estimates, max
+   ~29.7M, under the cap). `--gas-estimate-multiplier 50` is too aggressive: PoseidonHasher OOG'd
+   on-chain at a 1.76M limit.
+2. **Manager hook gas limit.** Tempo meters SSTORE ~11x mainnet. A real BSM `onRegister` hook
+   needs ~2.6M gas vs the tnt-core default 500k hook budget, so `registerOperator` reverts with
+   `ManagerRejected(manager)`. The deployer/admin must call
+   `Tangle.setManagerHookGasLimit(4000000)` (done: `0x5a1c4dc2aa9426bfb173190a8ddbe064327c8b392484b4615875fdaf52bd1936`).
+   Future Tempo tnt-core deployments should set `_managerHookGasLimit` at deploy time — the
+   storage slot exists for exactly this.
+3. **circomlibjs version.** `scripts/deploy-poseidon.mjs` requires `circomlibjs@0.0.8`
+   (`poseidon_gencontract`); current 0.1.7 only exports `poseidonContract`. 0.0.8 also needs its
+   transitive deps installed explicitly on npm ≥ 9 (`big-integer`, `ffjavascript`, `blakejs`).
+4. **Gas is pathUSD.** Accounts need pathUSD (not ETH) for fees; `cast rpc tempo_fundAddress`
+   is the testnet faucet for fresh keys. Plain type-2 transactions work unchanged for EOAs —
+   no client changes were needed for the Rust operator billing path.
