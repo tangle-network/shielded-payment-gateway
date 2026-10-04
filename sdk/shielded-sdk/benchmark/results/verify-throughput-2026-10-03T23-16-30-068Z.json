@@ -1,0 +1,82 @@
+{
+  "startedAt": "2026-10-03T23:16:30.068Z",
+  "host": "Drews-MacBook-Pro.local",
+  "cpu": "Apple M1 Max",
+  "cores": 10,
+  "node": "v26.8.1",
+  "snarkjs": "0.7.6",
+  "circuit": "poseidon_vanchor_2_2",
+  "levels": [
+    {
+      "concurrency": 1,
+      "perWorker": 1000,
+      "workersOk": 1,
+      "totalVerified": 1000,
+      "totalFailed": 0,
+      "batchWallMs": 11408.4,
+      "aggregateVerifiesPerSec": 87.7,
+      "perWorkerVerifiesPerSec": [
+        89.9
+      ],
+      "machineStateBefore": {
+        "loadavg": [
+          97.48,
+          153.98,
+          122.5
+        ],
+        "freeMemBytes": 4616454144
+      }
+    },
+    {
+      "concurrency": 4,
+      "perWorker": 1000,
+      "workersOk": 4,
+      "totalVerified": 4000,
+      "totalFailed": 0,
+      "batchWallMs": 25997,
+      "aggregateVerifiesPerSec": 153.9,
+      "perWorkerVerifiesPerSec": [
+        39.2,
+        39.6,
+        39.4,
+        39.8
+      ],
+      "machineStateBefore": {
+        "loadavg": [
+          88.78,
+          150.25,
+          121.54
+        ],
+        "freeMemBytes": 313475072
+      }
+    },
+    {
+      "concurrency": 8,
+      "perWorker": 1000,
+      "workersOk": 8,
+      "totalVerified": 8000,
+      "totalFailed": 0,
+      "batchWallMs": 45038.8,
+      "aggregateVerifiesPerSec": 177.6,
+      "perWorkerVerifiesPerSec": [
+        22.8,
+        22.7,
+        22.8,
+        22.7,
+        22.8,
+        22.9,
+        22.8,
+        22.8
+      ],
+      "machineStateBefore": {
+        "loadavg": [
+          84.04,
+          144.23,
+          120.2
+        ],
+        "freeMemBytes": 3874242560
+      }
+    }
+  ],
+  "finishedAt": "2026-10-03T23:17:52.505Z"
+}

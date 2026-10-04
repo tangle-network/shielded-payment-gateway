@@ -1,0 +1,276 @@
+{
+  "startedAt": "2026-10-03T23:05:36.863Z",
+  "host": "Drews-MacBook-Pro.local",
+  "platform": "Darwin 25.1.0 arm64",
+  "cpu": "Apple M1 Max",
+  "cores": 10,
+  "node": "v26.8.1",
+  "snarkjs": "0.7.6",
+  "levels": [
+    {
+      "circuit": "poseidon_vanchor_2_2",
+      "concurrency": 1,
+      "proofsRequested": 12,
+      "proofsOk": 12,
+      "proofsFailed": 0,
+      "wallSec": 26.32,
+      "throughputProofsPerSec": 0.4559,
+      "latencyMsP50": "2184",
+      "latencyMsP95": "2494",
+      "latencyMsMin": "1995",
+      "latencyMsMax": "2494",
+      "peakRssBytesPerProcess": 981188608,
+      "medianRssBytesPerProcess": 959791104,
+      "machineStateBefore": {
+        "loadavg": [
+          50.8,
+          54.04,
+          64.27
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 441073664
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          55.09,
+          54.78,
+          64.18
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 1124892672
+      }
+    },
+    {
+      "circuit": "poseidon_vanchor_2_2",
+      "concurrency": 2,
+      "proofsRequested": 12,
+      "proofsOk": 12,
+      "proofsFailed": 0,
+      "wallSec": 24.29,
+      "throughputProofsPerSec": 0.494,
+      "latencyMsP50": "3804",
+      "latencyMsP95": "5291",
+      "latencyMsMin": "3469",
+      "latencyMsMax": "5291",
+      "peakRssBytesPerProcess": 1005092864,
+      "medianRssBytesPerProcess": 965410816,
+      "machineStateBefore": {
+        "loadavg": [
+          55.09,
+          54.78,
+          64.18
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 1126449152
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          75.89,
+          59.41,
+          65.62
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 1887666176
+      }
+    },
+    {
+      "circuit": "poseidon_vanchor_2_2",
+      "concurrency": 4,
+      "proofsRequested": 12,
+      "proofsOk": 12,
+      "proofsFailed": 0,
+      "wallSec": 23.13,
+      "throughputProofsPerSec": 0.5188,
+      "latencyMsP50": "7591",
+      "latencyMsP95": "8372",
+      "latencyMsMin": "6982",
+      "latencyMsMax": "8372",
+      "peakRssBytesPerProcess": 997523456,
+      "medianRssBytesPerProcess": 930496512,
+      "machineStateBefore": {
+        "loadavg": [
+          75.89,
+          59.41,
+          65.62
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 1887666176
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          105.09,
+          67.23,
+          68.23
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 3970711552
+      }
+    },
+    {
+      "circuit": "poseidon_vanchor_2_2",
+      "concurrency": 8,
+      "proofsRequested": 12,
+      "proofsOk": 12,
+      "proofsFailed": 0,
+      "wallSec": 25.98,
+      "throughputProofsPerSec": 0.4618,
+      "latencyMsP50": "16258",
+      "latencyMsP95": "16965",
+      "latencyMsMin": "9569",
+      "latencyMsMax": "16965",
+      "peakRssBytesPerProcess": 978386944,
+      "medianRssBytesPerProcess": 553861120,
+      "machineStateBefore": {
+        "loadavg": [
+          105.09,
+          67.23,
+          68.23
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 3970711552
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          140.82,
+          78.7,
+          72.34
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 6098763776
+      }
+    },
+    {
+      "circuit": "poseidon_vanchor_16_2",
+      "concurrency": 1,
+      "proofsRequested": 8,
+      "proofsOk": 8,
+      "proofsFailed": 0,
+      "wallSec": 84.52,
+      "throughputProofsPerSec": 0.0946,
+      "latencyMsP50": "10083",
+      "latencyMsP95": "12445",
+      "latencyMsMin": "8886",
+      "latencyMsMax": "12445",
+      "peakRssBytesPerProcess": 2706882560,
+      "medianRssBytesPerProcess": 2665742336,
+      "machineStateBefore": {
+        "loadavg": [
+          140.82,
+          78.7,
+          72.34
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 6096797696
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          109.96,
+          86.02,
+          75.88
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 3330605056
+      }
+    },
+    {
+      "circuit": "poseidon_vanchor_16_2",
+      "concurrency": 2,
+      "proofsRequested": 8,
+      "proofsOk": 8,
+      "proofsFailed": 0,
+      "wallSec": 115.86,
+      "throughputProofsPerSec": 0.069,
+      "latencyMsP50": "26294",
+      "latencyMsP95": "37032",
+      "latencyMsMin": "20717",
+      "latencyMsMax": "37032",
+      "peakRssBytesPerProcess": 2725265408,
+      "medianRssBytesPerProcess": 2257584128,
+      "machineStateBefore": {
+        "loadavg": [
+          109.96,
+          86.02,
+          75.88
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 3330605056
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          170.89,
+          116.19,
+          89.03
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 5487575040
+      }
+    },
+    {
+      "circuit": "poseidon_vanchor_16_2",
+      "concurrency": 4,
+      "proofsRequested": 8,
+      "proofsOk": 8,
+      "proofsFailed": 0,
+      "wallSec": 93.16,
+      "throughputProofsPerSec": 0.0859,
+      "latencyMsP50": "36683",
+      "latencyMsP95": "56611",
+      "latencyMsMin": "36338",
+      "latencyMsMax": "56611",
+      "peakRssBytesPerProcess": 2377482240,
+      "medianRssBytesPerProcess": 1646608384,
+      "machineStateBefore": {
+        "loadavg": [
+          170.89,
+          116.19,
+          89.03
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 5487755264
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          226.43,
+          150.28,
+          105.08
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 9664692224
+      }
+    },
+    {
+      "circuit": "poseidon_vanchor_16_2",
+      "concurrency": 8,
+      "proofsRequested": 8,
+      "proofsOk": 8,
+      "proofsFailed": 0,
+      "wallSec": 76.57,
+      "throughputProofsPerSec": 0.1045,
+      "latencyMsP50": "76087",
+      "latencyMsP95": "76570",
+      "latencyMsMin": "73937",
+      "latencyMsMax": "76570",
+      "peakRssBytesPerProcess": 1713750016,
+      "medianRssBytesPerProcess": 1529315328,
+      "machineStateBefore": {
+        "loadavg": [
+          226.43,
+          150.28,
+          105.08
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 9664872448
+      },
+      "machineStateAfter": {
+        "loadavg": [
+          332.24,
+          196.42,
+          126.18
+        ],
+        "totalMemBytes": 34359738368,
+        "freeMemBytes": 15450308608
+      }
+    }
+  ],
+  "finishedAt": "2026-10-03T23:13:26.727Z"
+}
