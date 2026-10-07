@@ -8,7 +8,7 @@ on:
 jobs:
   forge-test:
     name: Forge Tests
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
 
   sdk-test:
     name: SDK Tests
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: sdk/shielded-sdk
@@ -50,7 +50,7 @@ jobs:
 
   sp1-contracts:
     name: SP1 Contract Tests
-    runs-on: [self-hosted, ci-public]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: sp1-batch/contracts
