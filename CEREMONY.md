@@ -171,6 +171,53 @@ jq . beacon-proofs/poseidon_vanchor_2_2_beacon_proof.json
 curl -s https://api.drand.sh/public/6518808   # compare randomness + signature
 ```
 
+## Round 2 — beelink1 + beelink2 contributions (2026-10-08)
+
+A second contribution round was chained on top of the round-1 final zkeys
+above (release `circuits-v1.0.0-phase2`, shas verified against its
+`SHA256SUMS.txt` before starting). Each circuit received **2 further
+machine-independent contributions + 1 fresh drand beacon**, executed after
+the round-1 beacon:
+
+| step | machine | notes |
+|---|---|---|
+| contrib 4 | `beelink1-wsl` (`DESKTOP-18IR33V`, Linux 6.18.40.1-microsoft-standard-WSL2 x86_64, node v24.21.0, snarkjs 0.7.5) | entropy: two 64-byte `/dev/urandom` reads **generated on beelink1, never transmitted** + machine-unique material, hashed (fed via `snarkjs -e`); snarkjs additionally mixed 64B OS CSPRNG |
+| contrib 5 | `beelink2-wsl` (`beelink2`, same WSL2 stack, independently installed snarkjs 0.7.5) | same construction, fresh independent draws on beelink2 |
+| beacon 2 | **drand** (League of Entropy) | fresh round fetched **after** both round-2 contributions completed, applied via `snarkjs zkey beacon` (2^10 iterations) |
+
+Every round-2 final zkey was verified with
+`snarkjs zkey verify <original round-1 r1cs> ppot_0080_18.ptau <zkey>` →
+**"ZKey Ok!"** for all 5 circuits. Machine-readable log:
+`ceremony-round2-attestation.jsonl` (attached to release
+`circuits-v2.0.0-phase2`); drand fetch proofs in `beacon-proofs/`.
+
+Final round-2 zkeys (sha256) and drand rounds:
+
+| circuit | final zkey sha256 | drand round |
+|---|---|---|
+| `poseidon_vanchor_2_2` | `a36050d452e0c567459ee7c69a7739e9b964e4bd3a039c38dd5699f0a1e2ce6b` | 6533092 |
+| `poseidon_vanchor_2_8` | `f2fa55082602e799dd5169b5e0cd4a2afa896f71f60b9784a37cf8ffef65be95` | 6533094 |
+| `poseidon_vanchor_16_2` | `a89bdc2322074eac1442f4e0963222edf4184d63c9997e165bfdbcb7e5329b8f` | 6533103 |
+| `poseidon_vanchor_16_8` | `57aa1d7c55a3109fc29f71248003185db7504dc87365671459c6e972168407ca` | 6533112 |
+| `rln_payment_2_8` | `2f97a8fddf37040d68d9d1de28ea827500e8734ed516c38c4dec3e68659cc782` | 6533097 |
+
+**Trust statement after round 2.** Each circuit's chain now has 6 toxic-waste
+slots: 5 contributions (4 machines: MacBook-Pro, Hetzner fsn1, beelink1,
+beelink2) + 2 drand beacons. All 5 human-operated contributions remain
+single-operator (Drew), so the strongest honest reading is still **1-of-2**
+(the operator, and the drand League of Entropy, whose two beacons are
+independent rounds) — with 4-way machine/environment independence for the
+operator's slots. One external contribution remains the upgrade that adds
+operator independence.
+
+**Deployment note.** Round-2 keys change the Groth16 verification keys, so
+verifier contracts built from round-1 keys do **not** verify round-2 proofs.
+Existing Base Sepolia / Tempo testnet deployments keep round-1 verifiers;
+the Ethereum/Base mainnet launch deploys verifiers from
+`circuits-v2.0.0-phase2` (which also ships the r1cs files needed for
+independent `zkey verify`, exported `*_verifier.sol`, and
+`*_verification_key.json`).
+
 ## Strengthening the ceremony (external contributions welcome)
 
 The trust assumption improves with every additional independent
