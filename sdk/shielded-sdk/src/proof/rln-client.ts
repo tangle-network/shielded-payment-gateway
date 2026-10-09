@@ -1,3 +1,10 @@
+// ⚠️ STALE PROTOTYPE — DO NOT USE (re-audit N-6, 2026-10-09).
+// This client's witness schema does not match the current rln_payment_2_8
+// circuit and its `poseidonHash` is a keccak256 placeholder — it CANNOT
+// produce valid proofs against the deployed RLNSettlement. RLN is excluded
+// from the launch scope (SECURITY.md). Kept only as a shape reference for
+// the future RLN client rewrite; use circuits-v2.0.0-phase2 artifacts and
+// the SDK's current Poseidon helpers when reviving.
 import * as snarkjs from 'snarkjs'
 import type { CircuitArtifacts, Groth16Proof } from './prover.js'
 

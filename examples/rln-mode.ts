@@ -1,4 +1,8 @@
 #!/usr/bin/env npx tsx
+// ⚠️ STALE — does not run against the current circuits (depends on the
+// stale sdk/shielded-sdk/src/proof/rln-client.ts prototype; see N-6 header
+// there). RLN is excluded from launch scope (SECURITY.md). Kept as a
+// reference for the future RLN revival only.
 /**
  * RLN Mode (Per-Request Proofs) — Full Flow
  *
