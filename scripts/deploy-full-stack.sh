@@ -108,6 +108,28 @@ else
         exit 1
     fi
 
+    # Pin verifier artifacts to the ceremony release: if SHA256SUMS.txt is
+    # present alongside the verifiers (as in circuits-v* releases), every
+    # *_verifier.sol must hash-match before we deploy it. Prevents deploying
+    # stale/mixed-round keys (round-1 vs round-2 verifiers are incompatible).
+    if [ -f "$VERIFIERS_DIR/SHA256SUMS.txt" ]; then
+        echo "  Verifying verifier artifacts against SHA256SUMS.txt..."
+        for v in poseidon_vanchor_2_2 poseidon_vanchor_2_8 poseidon_vanchor_16_2 poseidon_vanchor_16_8; do
+            f="$VERIFIERS_DIR/${v}_verifier.sol"
+            [ -f "$f" ] || continue
+            expected=$(grep "${v}_verifier.sol" "$VERIFIERS_DIR/SHA256SUMS.txt" | awk '{print $1}')
+            actual=$(shasum -a 256 "$f" | awk '{print $1}')
+            if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+                echo "  ERROR: $f sha256 mismatch (release=$expected actual=$actual)"
+                exit 1
+            fi
+        done
+        echo "  Verifier artifacts verified."
+    else
+        echo "  WARNING: no SHA256SUMS.txt in $VERIFIERS_DIR — verifier provenance unpinned"
+        echo "  (acceptable for anvil/local; do NOT deploy to mainnet without release checksums)"
+    fi
+
     # Deploy individual verifiers (2-input and 16-input for 8-edge circuits)
     echo "  Deploying Verifier8_2..."
     V8_2=$(forge create --broadcast --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --json \
