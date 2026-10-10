@@ -214,3 +214,29 @@ Embedding operator `0x8b7aBE33279894E7debCCB0a49E182588FEf0c48` (embedding-infer
 4. **Gas is pathUSD.** Accounts need pathUSD (not ETH) for fees; `cast rpc tempo_fundAddress`
    is the testnet faucet for fresh keys. Plain type-2 transactions work unchanged for EOAs —
    no client changes were needed for the Rust operator billing path.
+
+## Tempo Moderato testnet (chain 42431) — circuits-v2.0.0-phase2 round-2 rehearsal
+
+**Date:** 2026-10-10 (UTC) · **Deployer:** `0x2420FFf17c4213A4075cf5f7B6dc33429Aaf22Bb` · **Deploy block:** 38918810
+**Purpose:** mainnet dress rehearsal with the round-2 ceremony keys + zk-pool stress test. Parallel stack — the round-1 rehearsal stack above is untouched and still serves the staging router.
+
+Deployed with `scripts/deploy-round2-tempo.sh` (isolated outputs under `deploy/output-round2/`, sha256-pinned verifiers from release `circuits-v2.0.0-phase2`, fail-closed). Note: release `*_verifier.sol` files deploy byte-exact as `Groth16Verifier` (selector-compatible with `IVAnchorVerifierX_Y`) so artifact hashes stay pinned to the release.
+
+| Contract | Address |
+|---|---|
+| VAnchorTree (pool) | `0x1C51b6e6e7cA5C691E0588FE9fa2540597068C45` |
+| ShieldedCredits | `0x8eDF035E4884971D2850D5972C7237dc3F8A802c` |
+| ShieldedGateway | `0xB2690bdB9E36E6e898B76b305218F688c81414a9` |
+| FungibleTokenWrapper (tsUSD/pathUSD) | `0x39A3af06259C2acc1f3789F6Dd0EB955c9A754F4` |
+| VAnchorVerifier | `0x2310D198a6C58bA25d3D7f6d4D8359167d21bc42` |
+| Verifier2_2 / 2_16 / 8_2 / 8_16 | `0x1b4d3C424BFb6535160c13c6B2c0C92737705c70` / `0x1389F666d060B242A8B5c5764cfe357370aAC3df` / `0xE6549Bd733E790547Ee8dfc70F917630e0a9587b` / `0x37d162B9e2E33d6C61F20683299B3Ea581E1f6dE` |
+| PoseidonHasher / libs T2–T6 / EncodeInputs | `0xcCD4435D9F4c73E2E94f52801FD9732dCf3C19B7` + `deployments-round2/tempo.json` |
+
+**First round-2 proofs on-chain** (`scripts/e2e-round2-proof.mts`, record `deployments-round2/e2e-proof-round2.json`):
+- Deposit 5 pathUSD, real Groth16 proof (round-2 `poseidon_vanchor_2_8`): tx `0x40c657838a9197df64fc225466fe087debdbdba9bd76e1ed2d564d5019ce43c3` (2.0s prove, 3.11M gas).
+- Withdrawal 2 pathUSD via join-split proof: tx `0x8b50d5d08d15a881dcd1656827227a027b24565136e7121ae8f9a0c681abe931` (1.6s prove, 3.11M gas, nullifier spent).
+- Negative: invalid proof reverts; double-spend reverts.
+
+**zk-pool stress** (`scripts/stress-zk-pool.mts`, report `deployments-round2/stress-report.json`): 20 identities, **181/181 txs succeeded** — 60 deposits + 20 joinsplits + 20 withdrawals + boundary tests (double-spend/proof-replay/tampered-proof all revert). Tree integrity exact at every phase (208/208 leaves). Proof gen p50 1.97s / p95 5.0s; deposit confirm p50 11.9s @ ~2.8M gas; joinsplit p50 7.2s; withdrawal p50 7.3s.
+
+**Tempo deploy notes for mainnet:** RPC rate limits dominate — use the throttled/retrying provider in `scripts/round2-lib.mts`; hardcode `gasLimit: 6M` on `transact` calls (ethers underestimates, OOG'd twice); `eth_getLogs` caps at 100k blocks and ignores topic filters; PoseidonT6 deploy uses ~24.6M gas (under the 30M tx cap only with estimate+20%).

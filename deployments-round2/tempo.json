@@ -1,0 +1,46 @@
+{
+  "network": "tempo-testnet (moderato)",
+  "chainId": 42431,
+  "rpcUrl": "https://rpc.moderato.tempo.xyz",
+  "deployedAt": "2026-10-09",
+  "rehearsal": "round-2 ceremony (circuits-v2.0.0-phase2)",
+  "deployer": "0x2420FFf17c4213A4075cf5f7B6dc33429Aaf22Bb",
+  "tangle": "0xff137b9c879c47c28ce389e84501925438ab4cda",
+  "stablecoin": "0x20C0000000000000000000000000000000000000",
+  "poseidon": {
+    "PoseidonT2": "0xf4cA8908Bf7d827E18f681Cd7e69519C19C98547",
+    "PoseidonT3": "0x4D8e7bbC9350332FE875656dF1bB33db7bf86c13",
+    "PoseidonT4": "0x839BA9Bc17734E87727c7F6B09498D00CaB5990c",
+    "PoseidonT5": "0x81a8B2C04f3Ff7A60272Dd768Bb36B56c6516979",
+    "PoseidonT6": "0x50e7F9Be0Bd65B1c11C65F8D12d5EDf13b7188Aa"
+  },
+  "vanchorEncodeInputs": "0x06A73202F9Ee96b82A93d89A51A8AF66cA6d91f7",
+  "verifiers": {
+    "v2_2": "0x1b4d3C424BFb6535160c13c6B2c0C92737705c70",
+    "v2_16": "0x1389F666d060B242A8B5c5764cfe357370aAC3df",
+    "v8_2": "0xE6549Bd733E790547Ee8dfc70F917630e0a9587b",
+    "v8_16": "0x37d162B9e2E33d6C61F20683299B3Ea581E1f6dE"
+  },
+  "poseidonHasher": "0xcCD4435D9F4c73E2E94f52801FD9732dCf3C19B7",
+  "vanchorVerifier": "0x2310D198a6C58bA25d3D7f6d4D8359167d21bc42",
+  "tokenWrapperHandler": "0xADa348e16170b38f3ACe74D320Bc4bf356aB2f20",
+  "fungibleTokenWrapper": "0x39A3af06259C2acc1f3789F6Dd0EB955c9A754F4",
+  "anchorHandler": "0x6B29ce9f5888D642fdB0A61ce0F9a249e4302d15",
+  "vanchorTree": "0x1C51b6e6e7cA5C691E0588FE9fa2540597068C45",
+  "shieldedCredits": "0x8eDF035E4884971D2850D5972C7237dc3F8A802c",
+  "shieldedGateway": "0xB2690bdB9E36E6e898B76b305218F688c81414a9",
+  "poolParams": {
+    "merkleTreeLevels": 30,
+    "maxEdges": 7,
+    "feePercentage": 0,
+    "minimumWithdrawalAmount": 0,
+    "maximumDepositAmount": "uint256.max",
+    "wrappingLimit": "uint256.max"
+  },
+  "ceremony": {
+    "release": "circuits-v2.0.0-phase2",
+    "sha256sums": "deploy/ceremony-round2/verifiers/SHA256SUMS.txt (verified pre-deploy, fail-closed)",
+    "note": "Release verifier.sol files are raw snarkjs output (contract Groth16Verifier); deployed byte-exact under that name. The snarkjs verifyProof(uint[2],uint[2][2],uint[2],uint[N]) selector matches the IVAnchorVerifierX_Y interface."
+  },
+  "deployBlock": 38918810
+}
