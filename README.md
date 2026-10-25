@@ -5,7 +5,6 @@
 <p align="center"><em>Anonymous pay-per-use payments for <a href="https://tangle.tools">Tangle</a> Blueprints via cross-chain shielded pools and prepaid credits.</em></p>
 
 <p align="center">
-  <a href="https://github.com/tangle-network/shielded-payment-gateway/actions"><img src="https://img.shields.io/github/actions/workflow/status/tangle-network/shielded-payment-gateway/ci.yml?branch=main&logo=github" alt="Build Status"></a>
   <a href="https://github.com/tangle-network/shielded-payment-gateway/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
   <a href="https://discord.com/invite/cv8EfJu3Tn"><img src="https://img.shields.io/discord/833784453251596298?label=Discord" alt="Discord"></a>
   <a href="https://t.me/tanglenet"><img src="https://img.shields.io/endpoint?color=neon&url=https%3A%2F%2Ftg.sumanjay.workers.dev%2Ftanglenet" alt="Telegram"></a>
@@ -67,6 +66,40 @@ User deposits (any chain) → VAnchor shielded pool
 - **Multi-stablecoin wrapping** — USDC + USDT + DAI → single pool token, maximizing anonymity set
 
 ## Getting Started
+
+### Local qualification
+
+Generic PR and push CI is retired. Run useful contract and SDK checks on an admitted Beelink at the exact pushed revision; keep real deployment and payment-flow proof separate.
+
+```bash
+beelink-gate --no-install auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
+  bash -euc './scripts/setup-shielded-deps.sh && forge build && forge test'
+
+beelink-gate --no-install auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
+  bash -euc 'cd sdk/shielded-sdk && npm install && npx vitest run --exclude "test/proof*.test.ts"'
+
+beelink-gate --no-install auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
+  bash -euc '
+cd sp1-batch/contracts
+python3 - <<"PYTHON"
+import json, pathlib, subprocess
+urls = {"lib/forge-std": "https://github.com/foundry-rs/forge-std.git",
+        "lib/openzeppelin-contracts": "https://github.com/OpenZeppelin/openzeppelin-contracts.git"}
+for path, url in urls.items():
+    pin = json.loads(pathlib.Path("foundry.lock").read_text())[path]["tag"]
+    dest = pathlib.Path(path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if not dest.exists():
+        subprocess.run(["git", "clone", "--depth", "1", "--branch", pin["name"], "--single-branch", url, path], check=True)
+    actual = subprocess.check_output(["git", "-C", path, "rev-parse", "HEAD"], text=True).strip()
+    if actual != pin["rev"]:
+        raise SystemExit(f"{path}: expected locked revision, found {actual}")
+PYTHON
+forge build
+forge test'
+```
+
+Foundry must already be available on the admitted host. The setup script owns root Solidity dependencies, and `sp1-batch/contracts/foundry.lock` owns the SP1 dependency revisions; the commands refuse a pre-existing SP1 checkout at another revision. The SDK has no committed dependency lockfile, so its existing `npm install` is not frozen proof. The SDK command retains the retired workflow exclusion for proof-artifact cases; it does not prove trusted setup, an actual zero-knowledge payment, or a deployed contract. The real local and deployment procedures below remain separate qualifications.
 
 ### Prerequisites
 
