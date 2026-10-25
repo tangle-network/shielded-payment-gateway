@@ -72,13 +72,13 @@ User deposits (any chain) → VAnchor shielded pool
 Generic PR and push CI is retired. Run useful contract and SDK checks on an admitted Beelink at the exact pushed revision; keep real deployment and payment-flow proof separate.
 
 ```bash
-beelink-gate --no-install auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
+beelink-gate auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
   bash -euc './scripts/setup-shielded-deps.sh && forge build && forge test'
 
-beelink-gate --no-install auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
+beelink-gate auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
   bash -euc 'cd sdk/shielded-sdk && npm install && npx vitest run --exclude "test/proof*.test.ts"'
 
-beelink-gate --no-install auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
+beelink-gate auto https://github.com/tangle-network/shielded-payment-gateway.git <full-sha> -- \
   bash -euc '
 cd sp1-batch/contracts
 python3 - <<"PYTHON"
